@@ -113,6 +113,7 @@ section.card{padding:16px;display:grid;gap:12px}
 .sec-h{display:grid;gap:2px}
 details.card>summary{cursor:pointer;padding:12px 16px;font-family:var(--f-display);font-weight:700;font-size:16px;list-style:none;display:flex;justify-content:space-between;gap:8px;align-items:center}
 details.card>summary::-webkit-details-marker{display:none}
+details.card>summary small{font-family:var(--f-body);font-weight:400;font-size:12px;color:var(--sub);margin-left:6px}
 details.card>summary::after{content:"開く ▾";flex:none;font-family:var(--f-body);font-size:12px;font-weight:400;color:var(--sub)}
 details.card[open]>summary::after{content:"閉じる ▴"}
 .card-body{padding:0 16px 16px;display:grid;gap:16px}
@@ -331,7 +332,7 @@ textarea.io{width:100%;min-height:6rem;font-family:var(--f-num);font-size:12px}
   </div>
 
   <details class="card" id="mgmt">
-    <summary>保存と読み込み</summary>
+    <summary><span>保存と読み込み<small>書き出し・読み込み・サンプルに戻す</small></span></summary>
     <div class="card-body" id="mgmtBody"></div>
   </details>
   <details class="card" id="helpBox">
@@ -917,7 +918,7 @@ function renderHelp() {
     <li>青い枠のマスは、使うのに必要な欄です（イベント名・商品名・価格）。</li>
     <li>商品の色は、レジのボタンの左端の色です。スマホなど幅の狭い画面では、色の四角を押すたびに次の色に変わります。</li>
     <li>赤い文字は、品切れ・残り少ない・合わないなどの注意です。</li></ul></div>
-  <div><h3>保存について</h3><p>記録はこのブラウザに自動で保存されます。電波のない会場でも、そのまま使えます。ブラウザのデータを消すと記録も消えるので、イベントが終わったら「保存と読み込み」の「ファイルに保存」で控えを取ってください。「文字をコピー」で文字として持ち出すこともできます。</p><p>読み込むときは、書き出したファイルを選ぶか、書き出した文字を貼り付けて「読み込む」を押します。今の記録は読み込んだ内容に置き換わるので、サンプル以外のときは2回押して確定します。結果は、押したボタンのすぐ横に出ます。<b>この画面は試作版です。</b></p></div>`;
+  <div><h3>保存について</h3><p>記録はこのブラウザに自動で保存されます。電波のない会場でも、そのまま使えます。ブラウザのデータを消すと記録も消えるので、イベントが終わったら「保存と読み込み」の「ファイルに保存」で控えを取ってください。「文字をコピー」で文字として持ち出すこともできます。</p><p>読み込むときは、書き出したファイルを選ぶか、書き出した文字を貼り付けて「読み込む」を押します。今の記録は読み込んだ内容に置き換わるので、サンプル以外のときは2回押して確定します。結果は、押したボタンのすぐ横に出ます。</p></div>`;
 }
 
 function renderAll(pop) {
