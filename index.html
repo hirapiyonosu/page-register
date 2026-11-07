@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="即売会の当日に使うレジです。商品ボタンを押して会計し、お釣り・在庫・売上・箱の中のお金を自動で出します。登録不要・無料、記録はこの端末の中だけに保存されます。">
+<meta name="theme-color" content="#1f1d1b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="即売会レジ">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.5 system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>即売会レジ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@700;900&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* 執筆進捗管理表・同人誌収支ツールと同じ地と色。タブレット横向きは「商品ボタン｜かごと合計」の2列 */
+:root{
+  --paper:#fbfaf7; --panel:#ffffff; --ink:#1f1d1b; --sub:#6b6560; --line:#e4e0da;
+  --accent:#1f62c9; --accent-ink:#1a52a8; --accent-soft:#e7effc; --accent-fg:#ffffff;
+  --field-bg:#ffffff; --field-line:#8a837c; --btn-line:#77716a; --btn-shadow:0 1px 0 rgba(0,0,0,.08);
+  --good:#2f8a5b; --good-soft:#e5f4e4; --bad:#c2453c; --bad-soft:#fbebeb; --zebra:#f6f4f0;
+  --band:#1f1d1b; --band-fg:#ffffff;
+  --q2:#1f62c9; --q3:#c2453c; --q4:#2f8a5b; --q5:#8456c9;
+  --f-display:"Zen Maru Gothic","Hiragino Maru Gothic ProN",sans-serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#1a1918; --panel:#232120; --ink:#efebe6; --sub:#a39d96; --line:#36332f;
+  --accent:#6ea2f5; --accent-ink:#9cc0ff; --accent-soft:#1d2a3e; --accent-fg:#0f1b2d;
+  --field-bg:#161514; --field-line:#77716a; --btn-line:#8a837c; --btn-shadow:0 1px 0 rgba(0,0,0,.4);
+  --good:#5cc08a; --good-soft:#1c3226; --bad:#e8766d; --bad-soft:#3a1f1d; --zebra:#1f1e1c;
+  --band:#000000; --band-fg:#efebe6;
+  --q2:#3d7ff0; --q3:#e0544a; --q4:#3aa36d; --q5:#9b6fe0; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#1a1918; --panel:#232120; --ink:#efebe6; --sub:#a39d96; --line:#36332f;
+  --accent:#6ea2f5; --accent-ink:#9cc0ff; --accent-soft:#1d2a3e; --accent-fg:#0f1b2d;
+  --field-bg:#161514; --field-line:#77716a; --btn-line:#8a837c; --btn-shadow:0 1px 0 rgba(0,0,0,.4);
+  --good:#5cc08a; --good-soft:#1c3226; --bad:#e8766d; --bad-soft:#3a1f1d; --zebra:#1f1e1c;
+  --band:#000000; --band-fg:#efebe6;
+  --q2:#3d7ff0; --q3:#e0544a; --q4:#3aa36d; --q5:#9b6fe0; color-scheme:dark}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;-webkit-tap-highlight-color:transparent}
+.wrap{max-width:1280px;margin:0 auto;padding-block:14px 90px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:grid;gap:16px}
+h2{font-family:var(--f-display);font-size:18px;margin:0}
+h3{font-size:14px;margin:0}
+p{margin:0}
+.lead{font-size:13px;color:var(--sub)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+input[type=date],input[type=text],input[type=number],select,textarea{font:inherit;font-size:14px;color:var(--ink);background:var(--field-bg);border:1px solid var(--field-line);border-radius:4px;padding:5px 8px;min-width:0;max-width:100%;box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);outline:none}
+input[type=number],input[type=date]{font-family:var(--f-num)}
+input[type=number]{text-align:right}
+input.req,select.req{border:2px solid var(--accent)}
+::placeholder{color:var(--sub);opacity:.7}
+button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ghost{font:inherit;font-size:13px;font-weight:500;background:var(--panel);color:var(--ink);border:1.5px solid var(--btn-line);border-radius:8px;padding:5px 11px;cursor:pointer;white-space:nowrap;box-shadow:var(--btn-shadow)}
+.ghost:hover{border-color:var(--accent);background:var(--accent-soft)}
+.ghost:active,.btn:active{transform:translateY(1px);box-shadow:none}
+.ghost.danger{color:var(--bad);border-color:var(--bad)}
+.ghost.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn{font:inherit;font-weight:700;background:var(--accent);color:var(--accent-fg);border:1.5px solid var(--accent);border-radius:8px;padding:7px 14px;cursor:pointer;box-shadow:var(--btn-shadow)}
+.btn:disabled,.ghost:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.x{border:0;background:transparent;color:var(--sub);cursor:pointer;font-size:15px;padding:2px 6px;border-radius:4px}
+.x:hover{color:var(--bad)}
+@media (pointer:coarse){.ghost,.btn{min-height:38px}}
+.acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tbtn{font:inherit;font-size:13px;background:transparent;border:0;color:var(--accent-ink);padding:2px 4px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+
+/* 帯 */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--band)}
+.band{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--band);color:var(--band-fg);box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.band-in{max-width:1280px;margin:0 auto;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;align-items:center;gap:6px 18px;flex-wrap:wrap}
+.band .who{display:grid;min-width:0;flex:1 1 12rem}
+.band .eyebrow{font-size:11px;letter-spacing:.1em;opacity:.85}
+.band h1{font-family:var(--f-display);font-weight:900;font-size:19px;margin:0;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.band .now{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+.band .now div{display:grid;line-height:1.2}
+.band .now span{font-size:11px;opacity:.85}
+.band .now b{font-family:var(--f-num);font-size:19px;font-weight:500;white-space:nowrap}
+.band .helpbtn{font:inherit;font-size:13px;font-weight:700;background:transparent;color:inherit;border:1.5px solid currentColor;border-radius:999px;padding:4px 12px;cursor:pointer}
+@media (max-width:560px){.band h1{font-size:16px}.band .now b{font-size:16px}.band .now{gap:12px}.band .eyebrow{display:none}}
+
+/* タブ */
+.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--bandh,56px));z-index:5;background:var(--paper);padding:8px 0;margin:-8px 0}
+html{scroll-padding-top:calc(var(--bandh,56px) + var(--tabsh,64px) + 120px)}
+#secSum{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--bandh,56px) + var(--tabsh,64px));z-index:4;padding:10px 14px;gap:8px;box-shadow:0 4px 10px rgba(0,0,0,.08)}
+#secSum .tiles{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+#secSum .tile{padding:6px 10px}
+#secSum .tile .v{font-size:20px}
+@media (max-width:700px){#secSum .tiles{grid-template-columns:repeat(3,minmax(0,1fr))}#secSum .tile .v{font-size:15px}#secSum .tile .d{display:none}#secSum h2{font-size:15px}#secSum .tile.free{display:none}}
+.tab{font:inherit;text-align:left;display:grid;gap:1px;background:var(--panel);color:var(--ink);border:1.5px solid var(--btn-line);border-radius:10px;padding:6px 12px;cursor:pointer;box-shadow:var(--btn-shadow)}
+.tab b{font-family:var(--f-display);font-size:16px}
+.tab span{font-size:12px;color:var(--sub)}
+.tab:hover{border-color:var(--accent)}
+.tab.on{border:2px solid var(--accent);background:var(--accent-soft);color:var(--accent-ink);box-shadow:none}
+.tab:active{transform:translateY(1px)}
+@media (max-width:700px){.tab{padding:6px 8px}.tab b{font-size:14px}.tab span{display:none}}
+.pane{display:grid;gap:16px}
+.wrap>*,.pane>*,section.card>*,.card-body>*{min-width:0}
+
+/* まとまり */
+section.card,details.card{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+section.card{padding:16px;display:grid;gap:12px}
+.sec-h{display:grid;gap:2px}
+details.card>summary{cursor:pointer;padding:12px 16px;font-family:var(--f-display);font-weight:700;font-size:16px;list-style:none;display:flex;justify-content:space-between;gap:8px;align-items:center}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary::after{content:"開く ▾";flex:none;font-family:var(--f-body);font-size:12px;font-weight:400;color:var(--sub)}
+details.card[open]>summary::after{content:"閉じる ▴"}
+.card-body{padding:0 16px 16px;display:grid;gap:16px}
+.note{background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;padding:12px 16px;font-size:13px;display:grid;gap:6px}
+.warn{color:var(--bad);font-size:13px;font-weight:700}
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 16px}
+.field{display:grid;gap:3px;align-content:start}
+.field>label,.field>.k{font-size:12px;font-weight:700}
+.field .hint{font-size:12px;color:var(--sub)}
+.subopt{margin-left:9px;padding-left:16px;border-left:2px solid var(--line);display:grid;gap:8px}
+
+/* 表：全部の列を縦にそろえる */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.t{border-collapse:collapse;width:100%;font-size:13px}
+table.t th{font-size:12px;font-weight:700;color:var(--sub);text-align:left;padding:4px 6px;border-bottom:1.5px solid var(--line);white-space:nowrap}
+table.t td{padding:5px 6px;border-bottom:1px dashed var(--line);vertical-align:middle}
+table.t th.r,table.t td.r{text-align:right}
+table.t th.c,table.t td.c{text-align:center}
+table.t td.out{font-family:var(--f-num);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+table.t td.dash{color:var(--sub);text-align:center}
+table.t tfoot td{border-bottom:0;border-top:1.5px solid var(--line);font-weight:700}
+table.t input[type=text]{width:100%;min-width:8rem}
+table.t input[type=number]{width:6rem}
+td.nw{white-space:nowrap}
+.tbl-wrap table.t td{white-space:nowrap}
+.tbl-wrap table.t td.wrap{white-space:normal;min-width:12rem}
+tr.void td{color:var(--sub)}
+tr.void td.amt{text-decoration:line-through}
+.sw{display:inline-block;width:20px;height:20px;border-radius:4px;border:1px solid var(--line);vertical-align:middle}
+.swatches{display:flex;gap:4px}
+.swatches button{width:22px;height:22px;border-radius:5px;border:1.5px solid transparent;cursor:pointer;padding:0}
+.swatches button.on{outline:2px solid var(--ink);outline-offset:1px}
+.swcycle{display:none;width:30px;height:30px;border-radius:6px;border:1.5px solid var(--btn-line);cursor:pointer;padding:0;box-shadow:var(--btn-shadow)}
+@media (max-width:700px){.swatches{display:none}.swcycle{display:inline-block}table.t input[type=number]{width:4.4rem}table.t input[type=text]{min-width:7rem}}
+.tag{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:0 8px;border:1px solid var(--field-line);color:var(--sub);white-space:nowrap}
+.tag.bad{border-color:var(--bad);color:var(--bad)}
+.tag.cash{border-color:var(--ink);color:var(--ink)}
+.tag.less{border-color:var(--accent);color:var(--accent-ink)}
+
+/* 結果のタイル */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:2px;align-content:start}
+.tile .k{font-size:12px;color:var(--sub)}
+.tile .v{font-family:var(--f-num);font-size:24px;line-height:1.25}
+.tile .d{font-size:12px;color:var(--sub)}
+.tile.main{border-color:var(--accent);background:var(--accent-soft)}
+.tile.bad{border-color:var(--bad);background:var(--bad-soft)}
+
+/* ── レジ画面 ── */
+.reg{display:grid;gap:16px;align-items:start}
+@media (min-width:820px){.reg{grid-template-columns:minmax(0,1fr) minmax(340px,400px)}
+  .reg .side{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--bandh,56px) + var(--tabsh,64px) + 8px);max-height:var(--sidemax,640px)}}
+.goods{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+@media (max-width:560px){.goods{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}
+.gbtn{position:relative;font:inherit;text-align:left;display:grid;align-content:space-between;gap:6px;min-height:96px;padding:10px 12px 10px 16px;background:var(--panel);color:var(--ink);border:1.5px solid var(--btn-line);border-radius:12px;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.12);overflow:hidden;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.gbtn::before{content:"";position:absolute;inset:0 auto 0 0;width:7px;background:var(--c,#999)}
+.gbtn:active{transform:translateY(2px);box-shadow:none}
+.gbtn .nm{font-weight:700;font-size:15px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;padding-right:30px}
+.gbtn .pr{font-family:var(--f-num);font-size:17px}
+.gbtn .st{font-size:12px;color:var(--sub)}
+.gbtn .st.low{color:var(--bad);font-weight:700}
+.gbtn.out{opacity:.45;cursor:not-allowed;box-shadow:none;border-style:dashed}
+.gbtn .incart{position:absolute;top:6px;right:6px}
+.gbtn.flash{animation:fl .25s}
+@keyframes fl{from{background:var(--accent-soft)}to{background:var(--panel)}}
+
+/* 個数の色：1=色なし 2=青 3=赤 4=緑 5以上=紫 */
+.q{display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 6px;border-radius:8px;font-family:var(--f-num);font-size:18px;font-weight:500;border:2px solid var(--btn-line);background:var(--panel);color:var(--ink)}
+.q.q2{background:var(--q2);border-color:var(--q2);color:#fff}
+.q.q3{background:var(--q3);border-color:var(--q3);color:#fff}
+.q.q4{background:var(--q4);border-color:var(--q4);color:#fff}
+.q.q5{background:var(--q5);border-color:var(--q5);color:#fff}
+.q.pop{animation:pop .2s}
+@keyframes pop{50%{transform:scale(1.25)}}
+.gbtn .incart .q{min-width:28px;height:28px;font-size:15px}
+
+.side{display:grid;grid-template-rows:auto minmax(90px,1fr) auto;gap:0;background:var(--panel);border:1.5px solid var(--line);border-radius:12px;overflow:hidden}
+.side-h{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.side-h h2{font-size:16px}
+.cart{overflow-y:auto;min-height:120px;-webkit-overflow-scrolling:touch}
+.cart .empty{padding:24px 12px;color:var(--sub);font-size:13px;text-align:center}
+/* かごの行：個数｜名前と単価｜小計｜−｜＋｜×（全部の行で同じ列） */
+.crow{display:grid;grid-template-columns:40px minmax(0,1fr) 5.6rem 38px 38px 30px;gap:6px;align-items:center;padding:7px 10px;border-bottom:1px dashed var(--line)}
+.crow .nm{font-weight:700;font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.crow .nm small{display:block;font-weight:400;font-size:12px;color:var(--sub);font-family:var(--f-num)}
+.crow .nm small i{font-style:normal;display:none}
+@media (max-width:560px){.crow{grid-template-columns:36px minmax(0,1fr) 36px 36px 26px;padding:7px 8px}.crow .sub{display:none}.crow .nm small i{display:inline}.crow .pm{height:36px}}
+.crow .sub{font-family:var(--f-num);text-align:right;white-space:nowrap}
+.crow .pm{font:inherit;font-size:20px;line-height:1;height:38px;border-radius:8px;border:1.5px solid var(--btn-line);background:var(--panel);color:var(--ink);cursor:pointer;box-shadow:var(--btn-shadow);touch-action:manipulation}
+.crow .pm:active{transform:translateY(1px);box-shadow:none}
+.crow .pm:disabled{opacity:.35}
+.crow.disc .nm{color:var(--bad)}
+.crow.disc .sub{color:var(--bad)}
+.pay{border-top:1.5px solid var(--line);padding:10px 12px 12px;display:grid;gap:10px;background:var(--panel)}
+@media (min-width:820px){.pay{max-height:calc(var(--sidemax,640px) - 150px);overflow-y:auto}}
+.totalrow{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.totalrow .k{font-weight:700}
+.totalrow .v{font-family:var(--f-num);font-size:36px;line-height:1.1}
+.totalrow .cnt{font-size:12px;color:var(--sub)}
+.discrow{display:flex;gap:8px;align-items:center;font-size:13px;flex-wrap:wrap}
+.discrow input{width:6rem;text-align:right;font-family:var(--f-num)}
+.change{border:1px solid var(--line);border-radius:8px;padding:6px 10px;display:grid;gap:2px}
+.change .h{font-size:12px;color:var(--sub)}
+/* お釣りの早見：もらった額｜→｜お釣り */
+.chg{display:grid;grid-template-columns:7rem 1.5rem 1fr;align-items:baseline;font-family:var(--f-num)}
+.chg .a{text-align:right}
+.chg .ar{text-align:center;color:var(--sub);font-family:var(--f-body)}
+.chg .b{text-align:right;font-size:19px}
+.chg .b small{font-family:var(--f-body);font-size:12px;color:var(--sub);margin-right:6px}
+.paybtns{display:grid;grid-template-columns:3fr 2fr;gap:8px}
+.paybtns.one{grid-template-columns:1fr}
+.paybtns .btn,.paybtns .ghost{min-height:54px;font-size:16px;font-weight:700;white-space:normal;line-height:1.25}
+.subbtns{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.warnbox{border:1.5px solid var(--bad);background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:700}
+/* スマホ：下に合計とかごへのボタン */
+.minibar{display:none}
+@media (max-width:819px){
+  .minibar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:7;justify-content:space-between;align-items:center;gap:10px;background:var(--panel);border-top:1.5px solid var(--line);box-shadow:0 -2px 10px rgba(0,0,0,.1);
+    padding:8px max(16px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+  .minibar b{font-family:var(--f-num);font-size:22px}
+  .cart{max-height:none}
+}
+
+/* 2つ以上入れた商品はボタンごと色を変える（打ち間違いを目立たせる） */
+.gbtn.in{border-width:3px;border-color:var(--ink)}
+.gbtn.g2,.gbtn.g3,.gbtn.g4,.gbtn.g5{color:#fff}
+.gbtn.g2{background:var(--q2);border-color:var(--q2)}
+.gbtn.g3{background:var(--q3);border-color:var(--q3)}
+.gbtn.g4{background:var(--q4);border-color:var(--q4)}
+.gbtn.g5{background:var(--q5);border-color:var(--q5)}
+.gbtn.g2 .st,.gbtn.g3 .st,.gbtn.g4 .st,.gbtn.g5 .st{color:#fff}
+.gbtn.g2 .incart .q,.gbtn.g3 .incart .q,.gbtn.g4 .incart .q,.gbtn.g5 .incart .q{background:#fff;border-color:#fff;color:var(--ink)}
+.gbtn.g2.flash,.gbtn.g3.flash,.gbtn.g4.flash,.gbtn.g5.flash{animation:none}
+.crow.r2{background:color-mix(in srgb,var(--q2) 16%,var(--panel))}
+.crow.r3{background:color-mix(in srgb,var(--q3) 16%,var(--panel))}
+.crow.r4{background:color-mix(in srgb,var(--q4) 16%,var(--panel))}
+.crow.r5{background:color-mix(in srgb,var(--q5) 16%,var(--panel))}
+.chg.plus{border-top:1px dashed var(--line);padding-top:2px}
+.chg.plus .a small{display:block;font-size:11px;color:var(--sub);font-family:var(--f-num)}
+.chg.big .b{font-size:28px}
+.recv{border:1.5px solid var(--accent);border-radius:8px;padding:6px 10px;display:grid;gap:4px;background:var(--accent-soft)}
+.left{display:grid;gap:16px;align-content:start;min-width:0}
+.cashpad{padding:12px 14px}
+.dens{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.den{position:relative;font:inherit;font-family:var(--f-num);font-size:17px;min-height:50px;border:1.5px solid var(--btn-line);background:var(--panel);color:var(--ink);cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.12);touch-action:manipulation}
+.den.bill{border-radius:6px;background:color-mix(in srgb,var(--good) 10%,var(--panel))}
+.den.coin{border-radius:999px;background:color-mix(in srgb,#b8860b 12%,var(--panel))}
+.den:active{transform:translateY(2px);box-shadow:none}
+.den b.q{position:absolute;top:-8px;right:-6px;min-width:24px;height:24px;font-size:13px}
+@media (max-width:560px){.dens{gap:6px}.den{font-size:13px;padding:0 2px;min-height:46px}}
+.dentbl{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px 12px}
+.filters{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 16px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;gap:4px;align-items:center;font-size:13px;border:1.5px solid var(--btn-line);border-radius:999px;padding:3px 10px;cursor:pointer;background:var(--panel)}
+.chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink);font-weight:700}
+.chip input{accent-color:var(--accent)}
+.chk{display:flex;gap:6px;align-items:center;font-size:14px}
+.chk input{accent-color:var(--accent);width:18px;height:18px}
+.k{font-size:12px;font-weight:700}
+input[type=time]{font:inherit;font-family:var(--f-num);font-size:14px;color:var(--ink);background:var(--field-bg);border:1px solid var(--field-line);border-radius:4px;padding:5px 8px;box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+.bar{height:12px;border-radius:999px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+tr.here td{background:var(--accent-soft)}
+td.neg{color:var(--bad);font-weight:700}
+.chgedit{display:grid;gap:4px;border-top:1px dashed var(--accent);padding-top:6px}
+.chgedit .erow{display:grid;grid-template-columns:minmax(0,1fr) 34px 2.5rem 34px;gap:6px;align-items:center;font-size:13px}
+.chgedit .erow b{text-align:center}
+.chgedit .pm{font:inherit;font-size:18px;line-height:1;height:32px;border-radius:8px;border:1.5px solid var(--btn-line);background:var(--panel);color:var(--ink);cursor:pointer}
+.chgedit .pm:disabled{opacity:.35}
+details.mvden>summary{cursor:pointer;font-size:13px;color:var(--accent-ink);text-decoration:underline;text-underline-offset:3px}
+details.mvden[open]>summary{margin-bottom:8px}
+table.mx td.top{color:var(--accent-ink);font-weight:700;background:var(--accent-soft)}
+table.mx td:first-child,table.mx th:first-child{position:sticky;left:0;background:var(--panel);z-index:1}
+input[readonly]{background:var(--zebra);box-shadow:none}
+
+/* お知らせ（下に出て消える） */
+.toast{position:fixed;left:50%;width:max-content;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:20;background:var(--ink);color:var(--paper);border-radius:10px;padding:10px 14px;display:flex;gap:12px;align-items:center;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:calc(100vw - 32px);font-size:14px}
+.toast.bad{background:var(--bad);color:#fff}
+.toast button{font:inherit;font-weight:700;background:transparent;color:inherit;border:1.5px solid currentColor;border-radius:8px;padding:4px 10px;cursor:pointer;white-space:nowrap}
+@media (max-width:819px){.toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}}
+
+textarea.io{width:100%;min-height:6rem;font-family:var(--f-num);font-size:12px}
+.help{font-size:14px;display:grid;gap:12px}
+.help h3{font-size:15px;font-family:var(--f-display)}
+.help ul,.help ol{margin:4px 0 0;padding-left:1.3em;display:grid;gap:3px}
+.legend{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:13px}
+.legend span{display:inline-flex;gap:4px;align-items:center}
+</style>
+
+<div class="band" id="band"></div>
+<div class="wrap">
+  <div class="note" id="sampleNote" hidden>
+    <b>いま表示しているのはサンプルです。</b>
+    <span>商品や価格は説明用の仮のものです。ボタンを押して試したあと、下のボタンで空の状態から始められます。</span>
+    <div><button class="btn" data-act="fresh">サンプルを消して新しく始める</button></div>
+  </div>
+  <nav class="tabs" id="tabs" aria-label="画面の切り替え"></nav>
+
+  <div class="pane" id="tab-reg"></div>
+  <div class="pane" id="tab-item" hidden>
+    <section class="card" id="secSet"></section>
+    <section class="card" id="secEvent"></section>
+    <section class="card" id="secMoney"></section>
+    <section class="card" id="secItems"></section>
+    <section class="card" id="secSets"></section>
+    <section class="card" id="secImport"></section>
+  </div>
+  <div class="pane" id="tab-log" hidden>
+    <section class="card" id="secSum"></section>
+    <section class="card" id="secByItem"></section>
+    <section class="card" id="secSlot"></section>
+    <section class="card" id="secBox"></section>
+    <section class="card" id="secSales"></section>
+  </div>
+
+  <details class="card" id="mgmt">
+    <summary>保存と読み込み</summary>
+    <div class="card-body" id="mgmtBody"></div>
+  </details>
+  <details class="card" id="helpBox">
+    <summary>使い方</summary>
+    <div class="card-body help" id="helpBody"></div>
+  </details>
+</div>
+<div class="minibar" id="minibar"></div>
+<div id="toastBox"></div>
+
+<script>
+"use strict";
+const KEY = "doujin-regi-v1";
+const TOOL = "即売会レジ";
+const uid = () => Math.random().toString(36).slice(2, 10);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const n = v => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
+const has = v => v !== "" && v != null && Number.isFinite(Number(v));
+const yen = v => Math.round(v).toLocaleString("ja-JP") + "円";
+const numish = v => (v === "" ? "" : Number(v));
+const $ = id => document.getElementById(id);
+const pad = x => String(x).padStart(2, "0");
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const hm = t => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const mdhm = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${hm(t)}`; };
+const COLORS = ["#e8892b", "#c8306a", "#2f6fd0", "#2f8a5b", "#8456c9", "#9a6000", "#6b6560"];
+const qc = q => (q >= 5 ? "q5" : q === 4 ? "q4" : q === 3 ? "q3" : q === 2 ? "q2" : "");
+const PAY = { cash: "現金", less: "キャッシュレス", free: "無料" };
+
+/* ── データ ──
+   items：商品（全イベント共通）。set=true はセットで、parts の中身から在庫を引く
+   events：イベントごとに 在庫・最初に箱に入れた額・会計・箱の出し入れ を持つ */
+const newItem = (name = "新しい商品", price = "", color = COLORS[0]) => ({ id: uid(), name, price, color, set: false, parts: [], low: "" });
+const newEvent = (name = "新しいイベント") => ({ id: uid(), name, date: today(), open: "", close: "", startDen: {}, start: "", counted: "", stock: {}, sales: [], moves: [] });
+
+function sample() {
+  const a = newItem("新刊（サンプル）", 800, COLORS[0]); a.low = 5;
+  const b = newItem("既刊（サンプル）", 500, COLORS[2]); b.low = 3;
+  const c = newItem("アクスタ（サンプル）", 1500, COLORS[1]);
+  const d = newItem("ステッカー（サンプル）", 200, COLORS[3]);
+  const s = newItem("新刊＋既刊セット（サンプル）", 1200, COLORS[4]); s.set = true; s.parts = [{ id: a.id, q: 1 }, { id: b.id, q: 1 }];
+  const ev = newEvent("イベントA（サンプル）"); ev.start = 20000; ev.open = "10:30"; ev.close = "15:30";
+  ev.stock = { [a.id]: 100, [b.id]: 6, [c.id]: 20, [d.id]: 50 };
+  return { items: [a, b, c, d, s], events: [ev], current: ev.id, tab: "reg", cart: [], disc: "", recv: [], cashMode: false, sample: true };
+}
+
+let S;
+function load() {
+  try { const raw = localStorage.getItem(KEY); if (raw) { const o = JSON.parse(raw); if (o && Array.isArray(o.items) && o.events?.length) { S = o; fix(); return; } } } catch (_) {}
+  S = sample();
+}
+function fix() {
+  S.cart = Array.isArray(S.cart) ? S.cart : []; S.recv = Array.isArray(S.recv) ? S.recv : []; S.events.forEach(e => { e.startDen = e.startDen || {}; }); S.disc = S.disc ?? "";
+  S.items.forEach(x => { x.parts = x.parts || []; });
+  if (!S.events.some(e => e.id === S.current)) S.current = S.events[0].id;
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) {} }
+const EV = () => S.events.find(e => e.id === S.current) || S.events[0];
+const IT = id => S.items.find(x => x.id === id);
+const singles = () => S.items.filter(x => !x.set);
+const sets = () => S.items.filter(x => x.set);
+
+/* ── 計算 ── */
+// ある商品を1個売ると、どの単品が何個減るか
+const baseOf = (x, parts) => (x.set ? (parts || x.parts).filter(p => IT(p.id)).map(p => ({ id: p.id, q: n(p.q) })) : [{ id: x.id, q: 1 }]);
+function soldMap(ev) {
+  const m = {};
+  ev.sales.forEach(s => { if (s.void) return; s.lines.forEach(l => {
+    const parts = l.parts || [{ id: l.id, q: 1 }];
+    parts.forEach(p => { m[p.id] = (m[p.id] || 0) + n(p.q) * n(l.qty); });
+  }); });
+  return m;
+}
+const stockOf = (ev, id) => (has(ev.stock[id]) ? n(ev.stock[id]) : null);
+// 残り（在庫を入れていなければ null）
+function remain(ev, id, sold) { const st = stockOf(ev, id); return st == null ? null : st - (sold[id] || 0); }
+function cartNeed() { const m = {}; S.cart.forEach(c => { const x = IT(c.id); if (!x) return; baseOf(x).forEach(p => { m[p.id] = (m[p.id] || 0) + p.q * c.qty; }); }); return m; }
+// その商品をあと何個かごに入れられるか（在庫なしの単品は Infinity）
+function canMore(ev, x, sold, need) {
+  const parts = baseOf(x); if (!parts.length) return 0;
+  let k = Infinity;
+  parts.forEach(p => { const r = remain(ev, p.id, sold); if (r == null || !p.q) return; k = Math.min(k, Math.floor((r - (need[p.id] || 0)) / p.q)); });
+  return k;
+}
+function itemRemain(ev, x, sold) {
+  if (!x.set) return remain(ev, x.id, sold);
+  let k = null; baseOf(x).forEach(p => { const r = remain(ev, p.id, sold); if (r == null || !p.q) return; const v = Math.floor(r / p.q); k = k == null ? v : Math.min(k, v); });
+  return k;
+}
+const isLow = (x, r) => r != null && r > 0 && has(x.low) && r <= n(x.low);
+function cartSum() { return S.cart.reduce((a, c) => a + n(c.price) * c.qty, 0); }
+function cartTotal() { return Math.max(0, cartSum() - n(S.disc)); }
+function totals(ev) {
+  const t = { cash: 0, less: 0, free: 0, count: 0, items: 0, disc: 0 };
+  ev.sales.forEach(s => { if (s.void) return; t.count++; t[s.pay] += s.pay === "free" ? s.sub : s.total; if (s.pay !== "free") t.disc += n(s.disc);
+    t.items += s.lines.reduce((a, l) => a + n(l.qty), 0); });
+  t.sales = t.cash + t.less;
+  t.moves = ev.moves.reduce((a, m) => a + n(m.amount), 0);
+  t.box = n(ev.start) + t.cash + t.moves;
+  return t;
+}
+// お釣りの早見に出す「もらう額」。小銭を足してお釣りをきりのよい額にする出し方も入れる
+function tenders(T) {
+  if (T <= 0) return [];
+  const c = new Set();
+  if (T < 1000) { const h = Math.ceil(T / 500) * 500; if (h > T) c.add(h); }
+  const k = Math.ceil(T / 1000) * 1000; if (k > T) c.add(k);
+  if (T < 5000) c.add(5000);
+  if (T < 10000) c.add(10000);
+  if (T >= 10000) { const m = Math.ceil(T / 5000) * 5000; if (m > T) c.add(m); c.add(Math.ceil((T + 1) / 10000) * 10000); }
+  const base = [...c].sort((a, b) => a - b).slice(0, 4);
+  const rows = base.map(a => ({ give: a, extra: 0 }));
+  // 小銭を足す：お釣りが500円単位（と、端数があれば100円単位）になる額を、お札の額に足す
+  base.filter(a => a % 1000 === 0).forEach(a => {
+    [500, 100].forEach(u => { const e = (((T - a) % u) + u) % u; if (e > 0 && e < 1000 && a + e > T && !rows.some(r => r.give === a + e)) rows.push({ give: a + e, extra: e, bill: a }); });
+  });
+  return rows.sort((x, y) => x.give - y.give).slice(0, 9);
+}
+/* 金種 */
+const DENOMS = [10000, 5000, 2000, 1000, 500, 100, 50, 10, 5, 1];
+const BILLS = [1000, 2000, 5000, 10000], COINS = [1, 5, 10, 50, 100, 500];
+const dname = d => d.toLocaleString("ja-JP") + (d >= 1000 ? "円札" : "円玉");
+const denSum = m => Object.entries(m || {}).reduce((a, [d, k]) => a + Number(d) * n(k), 0);
+const hasDen = m => Object.values(m || {}).some(k => n(k) > 0);
+const recvMap = () => { const m = {}; (S.recv || []).forEach(d => { m[d] = (m[d] || 0) + 1; }); return m; };
+const denText = m => DENOMS.filter(d => n(m[d]) > 0).map(d => `${dname(d)}×${n(m[d])}`).join("、");
+// 箱の中の金種：最初の内訳＋もらった−お釣りで出した。内訳がわからない現金（金種を入れずに決済・出し入れ）は「わからない額」
+function boxDen(ev) {
+  // C=お釣りの入れもの S=代金の入れもの（分けていないときは合わせて使う）
+  const cntC = {}, cntS = {}; DENOMS.forEach(d => { cntC[d] = n((ev.startDen || {})[d]); cntS[d] = 0; });
+  const known = hasDen(ev.startDen);
+  let recvIn = 0, chgOut = 0, noRecv = 0, movC = 0, movS = 0;
+  ev.sales.forEach(s => { if (s.void || s.pay !== "cash") return;
+    if (s.recv) { DENOMS.forEach(d => { cntS[d] += n(s.recv[d]); cntC[d] -= n((s.chg || {})[d]); }); recvIn += denSum(s.recv); chgOut += denSum(s.chg); }
+    else noRecv += s.total; });
+  ev.moves.forEach(m => { const sg = n(m.amount) < 0 ? -1 : 1, toS = m.box === "sale";
+    if (toS) movS += n(m.amount); else movC += n(m.amount);
+    if (m.den) DENOMS.forEach(d => { (toS ? cntS : cntC)[d] += sg * n(m.den[d]); }); });
+  const cnt = {}; DENOMS.forEach(d => { cnt[d] = cntC[d] + cntS[d]; });
+  const t = totals(ev);
+  return { cnt, cntC, cntS, known, unknown: t.box - denSum(cnt), chgBox: n(ev.start) - chgOut + movC, saleBox: recvIn + movS, noRecv };
+}
+// お釣りの内訳：手で直した内訳があれば（同じ受け取り・合計のときだけ）それを使う
+function changeOf(ev, rm, amount) {
+  const key = JSON.stringify(rm) + "|" + amount;
+  if (S.chgOv && S.chgOv.key === key) { const out = { ...S.chgOv.out }; Object.keys(out).forEach(d => { if (!out[d]) delete out[d]; }); return { out, short: 0, manual: true, diff: denSum(out) !== amount }; }
+  const c = makeChange(amount, availFor(ev, rm)); return { ...c, manual: false, diff: false };
+}
+// 決済のときにお釣りを出せる金種（分けているときはお釣りの入れものだけ。もらったお金も使える）
+function availFor(ev, rm) {
+  const bd = boxDen(ev); if (!bd.known) return null;
+  const av = { ...(S.split ? bd.cntC : bd.cnt) }; DENOMS.forEach(d => { av[d] = (av[d] || 0) + n(rm[d]); }); return av;
+}
+// お釣りの内訳。箱の中身がわかるときは、ない金種を使わない
+function makeChange(amount, avail) {
+  const out = {}; let rem = amount;
+  DENOMS.forEach(d => { if (d === 2000 && !(avail && avail[d] > 0)) return; let k = Math.floor(rem / d); if (avail) k = Math.min(k, Math.max(0, avail[d] || 0)); if (k > 0) { out[d] = k; rem -= k * d; } });
+  return { out, short: rem };
+}
+
+/* ── 帯とタブ ── */
+const TABS = [
+  { key: "reg", label: "レジ", sub: "商品を押して会計" },
+  { key: "item", label: "商品と準備", sub: "商品・価格・在庫・箱のお金" },
+  { key: "log", label: "履歴と集計", sub: "売れた数・売上・箱の中" },
+];
+function renderBand() {
+  const ev = EV(), t = totals(ev);
+  $("band").innerHTML = `<div class="band-in"><div class="who"><span class="eyebrow">${TOOL}</span><h1>${esc(ev.name)}</h1></div>
+    <div class="now"><div><span>売上</span><b>${yen(t.sales)}</b></div><div><span>会計</span><b>${t.count}件</b></div><div><span>箱の中にあるはず</span><b>${yen(t.box)}</b></div></div>
+    <button class="helpbtn" data-act="help">使い方</button></div>`;
+  $("sampleNote").hidden = !S.sample;
+  syncBandH();
+}
+function syncBandH() { const h = $("band").offsetHeight; if (h) document.documentElement.style.setProperty("--bandh", h + "px"); const th = $("tabs").offsetHeight; if (th) document.documentElement.style.setProperty("--tabsh", th + "px"); fitSide(); }
+// かごの枠を画面の高さに収めて、決済ボタンまでスクロールなしで見えるようにする
+function fitSide() { const reg = $("tab-reg"); if (!reg || reg.hidden) return; const top = reg.getBoundingClientRect().top + window.scrollY; document.documentElement.style.setProperty("--sidemax", Math.max(440, window.innerHeight - top - 12) + "px"); }
+window.addEventListener("resize", syncBandH);
+function renderTabs() {
+  const t = S.tab || "reg";
+  $("tabs").innerHTML = TABS.map(x => `<button class="tab ${x.key === t ? "on" : ""}" data-act="tab" data-v="${x.key}" aria-pressed="${x.key === t}"><b>${x.label}</b><span>${x.sub}</span></button>`).join("");
+  TABS.forEach(x => { $("tab-" + x.key).hidden = x.key !== t; });
+  document.body.dataset.tab = t;
+}
+
+/* ── レジ ── */
+function renderReg(pop) {
+  const ev = EV(), sold = soldMap(ev), need = cartNeed();
+  const qOf = id => S.cart.filter(c => c.id === id).reduce((a, c) => a + c.qty, 0);
+  const btns = S.items.map(x => {
+    const r = itemRemain(ev, x, sold), more = canMore(ev, x, sold, need), q = qOf(x.id);
+    const blocked = more <= 0;
+    let st = "";
+    if (r != null) st = r <= 0 ? `<span class="st low">品切れ</span>` : `<span class="st ${isLow(x, r) ? "low" : ""}">残り${r}${isLow(x, r) ? "（少ない）" : ""}</span>`;
+    else if (x.set && !x.parts.length) st = `<span class="st low">中身が未設定</span>`;
+    return `<button class="gbtn ${blocked ? "out" : ""} ${q ? "in g" + (q >= 5 ? 5 : q) : ""}" style="--c:${esc(x.color)}" data-act="add" data-id="${x.id}" ${blocked ? 'aria-disabled="true"' : ""}>
+      <span class="nm">${esc(x.name)}</span><span><span class="pr">${has(x.price) ? yen(x.price) : "価格なし"}</span><br>${st}</span>
+      ${q ? `<span class="incart"><span class="q ${qc(q)} ${pop === x.id ? "pop" : ""}">${q}</span></span>` : ""}</button>`;
+  }).join("");
+  const T = cartTotal(), cnt = S.cart.reduce((a, c) => a + c.qty, 0);
+  const rows = S.cart.map(c => {
+    const x = IT(c.id); const more = x ? canMore(ev, x, sold, need) : 0;
+    return `<div class="crow ${c.qty >= 2 ? "r" + Math.min(5, c.qty) : ""}"><span class="q ${qc(c.qty)} ${pop === c.id ? "pop" : ""}">${c.qty}</span>
+      <span class="nm">${esc(c.name)}<small>${yen(c.price)} × ${c.qty}<i>＝${yen(n(c.price) * c.qty)}</i></small></span>
+      <span class="sub">${yen(n(c.price) * c.qty)}</span>
+      <button class="pm" data-act="dec" data-id="${c.id}" aria-label="${esc(c.name)}を1つ減らす">−</button>
+      <button class="pm" data-act="inc" data-id="${c.id}" aria-label="${esc(c.name)}を1つ増やす" ${more <= 0 ? "disabled" : ""}>＋</button>
+      <button class="x" data-act="rm" data-id="${c.id}" aria-label="${esc(c.name)}をかごから出す">×</button></div>`;
+  }).join("");
+  const disc = n(S.disc) ? `<div class="crow disc"><span></span><span class="nm">値引き<small><i>−${yen(n(S.disc))}</i></small></span><span class="sub">−${yen(n(S.disc))}</span><span></span><span></span><button class="x" data-act="nodisc" aria-label="値引きをやめる">×</button></div>` : "";
+  const ch = tenders(T).map(r => `<div class="chg ${r.extra ? "plus" : ""}"><span class="a">${yen(r.give)}${r.extra ? `<small>${yen(r.bill)}＋${yen(r.extra)}</small>` : ""}</span><span class="ar">→</span><span class="b"><small>お釣り</small>${yen(r.give - T)}</span></div>`).join("");
+  const noPrice = S.cart.some(c => !has(c.price));
+  // 現金ボタン
+  const cash = !!S.cashMode && S.payCash !== false, rm = recvMap(), rs = denSum(rm);
+  let recvBox = "";
+  if (cash && rs > 0) {
+    const c2 = rs >= T ? changeOf(ev, rm, rs - T) : null;
+    const edit = c2 && S.chgEdit && rs - T > 0;
+    const ed = edit ? `<div class="chgedit"><span class="k">お釣りで渡す枚数</span>${DENOMS.filter(d => d <= rs - T && (DENS_ON().includes(d) || c2.out[d])).map(d => `<div class="erow"><span>${dname(d)}</span><button class="pm" data-act="chgDec" data-v="${d}" aria-label="${dname(d)}を減らす" ${c2.out[d] ? "" : "disabled"}>−</button><b class="num">${c2.out[d] || 0}</b><button class="pm" data-act="chgInc" data-v="${d}" aria-label="${dname(d)}を増やす">＋</button></div>`).join("")}
+      ${c2.diff ? `<div class="warnbox">内訳の合計が ${yen(denSum(c2.out))} です（お釣りは ${yen(rs - T)}）</div>` : ""}<div class="acts"><button class="tbtn" data-act="chgAuto">自動の内訳に戻す</button><button class="ghost" data-act="chgEdit">閉じる</button></div></div>` : "";
+    recvBox = `<div class="recv"><div class="chg"><span class="a">もらった</span><span class="ar"></span><span class="b">${yen(rs)}</span></div>
+      ${rs < T ? `<div class="warnbox">あと ${yen(T - rs)} 足りません</div>` : `<div class="chg big"><span class="a">お釣り</span><span class="ar"></span><span class="b">${yen(rs - T)}</span></div>
+      ${rs - T > 0 ? `<div class="lead">内訳：${denText(c2.out) || "―"}${c2.manual ? "（手で直した内訳）" : ""} ${edit ? "" : `<button class="tbtn" data-act="chgEdit">内訳を直す</button>`}</div>${!c2.manual && c2.short ? `<div class="warnbox">箱の中の小銭が足りないかもしれません（${yen(c2.short)}分）</div>` : ""}${ed}` : ""}`}</div>`;
+  }
+  const pad = cash ? `<section class="card cashpad" id="cashpad"><div class="sec-h"><h2>もらったお金</h2><p class="lead">受け取ったお金を、お札・硬貨ごとに押します。押した分からお釣りと内訳を出し、箱の中の金種も数えます。押さずに決済すると、その会計の金種は「わからない」になります。</p></div>
+    ${[BILLS, COINS].map((g, _, all) => { const ds = g.filter(d => DENS_ON().includes(d)).sort((a, b) => b - a); const cols = Math.max(...all.map(h => h.filter(d => DENS_ON().includes(d)).length)); return ds.length ? `<div class="dens" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${ds.map(d => `<button class="den ${d >= 1000 ? "bill" : "coin"}" data-act="recv" data-v="${d}"><span>${d.toLocaleString("ja-JP")}</span>${rm[d] ? `<b class="q ${qc(rm[d])}">${rm[d]}</b>` : ""}</button>`).join("")}</div>` : ""; }).join("")}
+    <div class="acts"><span>合計 <b class="num">${yen(rs)}</b></span><button class="ghost" data-act="recvBack" ${rs ? "" : "disabled"}>1枚戻す</button><button class="ghost danger" data-act="recvClear" ${rs ? "" : "disabled"}>数え直す</button></div></section>` : "";
+  $("tab-reg").innerHTML = `<div class="reg">
+    <div class="left"><div class="goods" id="goods">${btns || `<p class="lead">商品がありません。「商品と準備」タブで登録してください。</p>`}</div>${pad}</div>
+    <div class="side" id="side">
+      <div class="side-h"><h2>買い物かご</h2><button class="ghost danger" data-act="clear" ${S.cart.length || n(S.disc) || rs ? "" : "disabled"}>かごを空にする</button></div>
+      <div class="cart">${rows || disc ? rows + disc : `<p class="empty">左の商品ボタンを押すと、ここに並びます。<br>同じ商品は個数が増え、2つで青・3つで赤・4つで緑・5つ以上で紫になります。</p>`}</div>
+      <div class="pay">
+        <div class="totalrow"><span class="k">合計<br><span class="cnt">${cnt}点</span></span><span class="v">${yen(T)}</span></div>
+        ${noPrice ? `<div class="warnbox">価格が入っていない商品があります。「商品と準備」で入れてください。</div>` : ""}
+        ${recvBox || (T > 0 ? `<div class="change"><span class="h">もらった額 → お釣り（下の段は小銭を足す出し方）</span>${ch}</div>` : "")}
+        <div class="discrow"><label for="discIn">値引き</label><input type="text" id="discIn" data-f="disc" inputmode="numeric" autocomplete="off" value="${esc(S.disc)}" placeholder="0"> 円<span class="lead">（かご全体から引く）</span></div>
+        <div class="paybtns ${S.payCash === false || S.payLess === false ? "one" : ""}">${S.payCash !== false ? `<button class="btn" data-act="pay" data-v="cash" ${S.cart.length ? "" : "disabled"}>現金で決済</button>` : ""}${S.payLess !== false ? `<button class="${S.payCash === false ? "btn" : "ghost"}" data-act="pay" data-v="less" ${S.cart.length ? "" : "disabled"}>キャッシュレスで決済</button>` : ""}</div>
+        <div class="subbtns"><button class="ghost" data-act="pay" data-v="free" ${S.cart.length ? "" : "disabled"}>無料で渡した（献本・交換）</button><button class="tbtn" data-act="undoLast" ${ev.sales.some(s => !s.void) ? "" : "disabled"}>直前の会計を取り消す</button></div>
+      </div>
+    </div></div>`;
+  $("minibar").innerHTML = (S.tab || "reg") === "reg" ? `<span>合計 <b>${yen(T)}</b>　${cnt}点</span><button class="btn" data-act="toCart">かごと決済へ ↓</button>` : "";
+}
+
+/* ── 商品と準備 ── */
+function renderEvent() {
+  const ev = EV(), auto = hasDen(ev.startDen);
+  $("secEvent").innerHTML = `<div class="sec-h"><h2>イベント</h2><p class="lead">レジの記録はイベントごとに分かれます。前のイベントの記録は、ここで選ぶと見られます。商品は全部のイベントで共通です。</p></div>
+  <div class="form">
+    <div class="field"><label for="evPick">表示しているイベント</label><select id="evPick" data-pick="1">${S.events.map(e => `<option value="${e.id}" ${e.id === ev.id ? "selected" : ""}>${esc(e.name)}（${esc(e.date || "日付なし")}）</option>`).join("")}</select></div>
+    <div class="field"><label for="evName">イベント名</label><input type="text" id="evName" class="req" data-f="ev.name" value="${esc(ev.name)}" placeholder="C109 2日目"></div>
+    <div class="field"><label for="evDate">日付</label><input type="date" id="evDate" data-f="ev.date" value="${esc(ev.date)}"></div>
+    <div class="field"><label for="evOpen">開始の時刻</label><input type="time" id="evOpen" data-f="ev.open" value="${esc(ev.open || "")}"><span class="hint">時間帯ごとの集計の起点になります。</span></div>
+    <div class="field"><label for="evClose">終了の時刻</label><input type="time" id="evClose" data-f="ev.close" value="${esc(ev.close || "")}"></div>
+  </div>
+  <div class="acts"><button class="ghost" data-act="newEvent">＋ 新しいイベントを作る</button><span class="lead">今のイベントの在庫の数・時刻・釣り銭を引き継ぎます。</span></div>
+  <div class="acts"><button class="ghost danger" data-act="delEvent" id="delEventBtn" ${S.events.length > 1 ? "" : "disabled"}>このイベントを消す</button>${S.events.length > 1 ? "" : `<span class="lead">イベントが1つだけのときは消せません。</span>`}</div>`;
+  $("secMoney").innerHTML = `<div class="sec-h"><h2>釣り銭（最初に箱に入れるお金）</h2><p class="lead">お釣り用に用意したお金です。お札・硬貨の枚数を入れると合計を自動で出し、「箱の中にあるはず」の金種も数えられます。枚数を入れないときは、合計だけ手で入れます。</p></div>
+  <div class="dentbl">${DENOMS.map(d => `<div class="field"><label for="sd-${d}">${dname(d)}</label><input type="number" id="sd-${d}" data-f="sden:${d}" inputmode="numeric" min="0" value="${esc((ev.startDen || {})[d] ?? "")}" placeholder="0"></div>`).join("")}</div>
+  <label class="chk"><input type="checkbox" data-set="split" ${S.split ? "checked" : ""}>代金とお釣りを別の入れものに分けている</label>
+  <div class="subopt"><p class="lead">チェックを入れると、「履歴と集計」の箱の中のお金に、お釣りの入れものと代金の入れものの額が分かれて出ます。お釣りはお釣りの入れものから出す前提で内訳を決めます。正しく分けて数えられるのは、現金ボタンを使った会計だけです。（全部のイベントで共通の設定です）</p></div>
+  <div class="acts"><button class="ghost danger" data-act="clrDen" id="clrDenBtn" ${auto ? "" : "disabled"}>枚数を全部消す</button><span class="lead">枚数を消すと、合計を手で入れられるようになります。</span></div>
+  <div class="field" style="max-width:16rem"><label for="evStart">最初に箱に入れたお金（合計）</label><input type="number" id="evStart" data-f="ev.start" inputmode="numeric" value="${esc(ev.start)}" placeholder="20000" ${auto ? "readonly" : ""}><span class="hint" data-out="starthint">${auto ? "枚数から計算しています" : "枚数を入れないときは、ここに合計を入れます"}</span></div>`;
+}
+const DEF_DENS = [10000, 5000, 1000, 500, 100, 50, 10];
+const DENS_ON = () => (Array.isArray(S.dens) ? S.dens : DEF_DENS);
+function renderSettings() {
+  const on = DENS_ON();
+  $("secSet").innerHTML = `<div class="sec-h"><h2>レジの設定</h2><p class="lead">全部のイベントで共通です。</p></div>
+  <div class="field"><span class="k">決済ボタン</span><span class="hint">使う支払い方法だけ表示します。どちらか1つは表示されます。</span>
+    <div class="acts"><label class="chk"><input type="checkbox" data-set="payCash" ${S.payCash !== false ? "checked" : ""}>現金で決済</label><label class="chk"><input type="checkbox" data-set="payLess" ${S.payLess !== false ? "checked" : ""}>キャッシュレスで決済</label></div></div>
+  <label class="chk"><input type="checkbox" data-set="cashMode" ${S.cashMode ? "checked" : ""} ${S.payCash === false ? "disabled" : ""}>現金ボタンを表示する</label>
+  <div class="subopt"><p class="lead">レジに、お札と硬貨のボタンが出ます。もらったお金を押すと、お釣りとその内訳、箱の中の金種まで数えます。途中で切り替えても使えます。ボタンを使わずに決済した現金は「内訳がわからない額」として数え、合計額は変わりません。${S.payCash === false ? "（現金で決済を表示していないので使えません）" : ""}</p>
+  ${S.cashMode && S.payCash !== false ? `<div class="field"><span class="k">表示する金種</span><div class="chips">${DENOMS.map(d => `<label class="chip ${on.includes(d) ? "on" : ""}"><input type="checkbox" data-den="${d}" ${on.includes(d) ? "checked" : ""}>${dname(d)}</label>`).join("")}</div></div>` : ""}</div>`;
+}
+function swatchHTML(x) { const nx = COLORS[(COLORS.indexOf(x.color) + 1) % COLORS.length]; return `<button class="swcycle" style="background:${esc(x.color)}" data-act="color" data-id="${x.id}" data-v="${nx}" aria-label="押すと次の色に変わります"></button><span class="swatches">${COLORS.map(c => `<button style="background:${c}" class="${x.color === c ? "on" : ""}" data-act="color" data-id="${x.id}" data-v="${c}" aria-label="色を選ぶ"></button>`).join("")}</span>`; }
+function renderItems() {
+  const ev = EV(), sold = soldMap(ev), list = singles();
+  const rows = list.map((x, i) => {
+    const r = remain(ev, x.id, sold);
+    return `<tr><td class="nw"><button class="x" data-act="up" data-id="${x.id}" aria-label="上へ" ${i ? "" : "disabled"}>▲</button><button class="x" data-act="down" data-id="${x.id}" aria-label="下へ" ${i < list.length - 1 ? "" : "disabled"}>▼</button></td>
+      <td>${swatchHTML(x)}</td>
+      <td><input type="text" class="req" data-f="item:${x.id}:name" value="${esc(x.name)}" aria-label="商品名"></td>
+      <td class="r"><input type="number" class="req" data-f="item:${x.id}:price" inputmode="numeric" value="${esc(x.price)}" aria-label="価格"></td>
+      <td class="r"><input type="number" data-f="stock:${x.id}" inputmode="numeric" value="${esc(ev.stock[x.id] ?? "")}" placeholder="―" aria-label="このイベントの在庫"></td>
+      <td class="r"><input type="number" data-f="item:${x.id}:low" inputmode="numeric" value="${esc(x.low)}" placeholder="―" aria-label="残り少ないとみなす数"></td>
+      <td class="out" data-out="rem:${x.id}">${r == null ? "―" : r}</td>
+      <td class="c"><button class="x" data-act="delItem" data-id="${x.id}" id="del-${x.id}" aria-label="消す">×</button></td></tr>`;
+  }).join("");
+  $("secItems").innerHTML = `<div class="sec-h"><h2>商品</h2><p class="lead">商品名と価格を入れると、レジにボタンができます。並びはレジのボタンの順番です。在庫はこのイベントに持っていく数で、入れた商品だけ残りを数えて、少なくなったら知らせます。空欄なら数えません。</p></div>
+  <div class="tbl-wrap"><table class="t"><thead><tr><th>並び</th><th>色</th><th>商品名</th><th class="r">価格（円）</th><th class="r">在庫</th><th class="r">残り少ない</th><th class="r">残り</th><th class="c">消す</th></tr></thead>
+  <tbody>${rows || `<tr><td colspan="8" class="dash">商品がありません</td></tr>`}</tbody></table></div>
+  <div class="acts"><button class="ghost" data-act="addItem">＋ 商品を足す</button><span class="lead">「残り少ない」は、残りがこの数以下になったらボタンを赤で知らせる数です。</span></div>
+  <div class="acts"><button class="ghost danger" data-act="clrStock" id="clrStockBtn" ${Object.keys(ev.stock).length ? "" : "disabled"}>在庫を全部消す</button><button class="ghost danger" data-act="clrLow" id="clrLowBtn" ${list.some(x => has(x.low)) ? "" : "disabled"}>残り少ないを全部消す</button><span class="lead">このイベントの在庫の数や、残り少ないとみなす数を空にします。</span></div>`;
+}
+function renderSets() {
+  const ev = EV(), sold = soldMap(ev), list = sets(), base = singles();
+  const rows = list.map((x, i) => {
+    const r = itemRemain(ev, x, sold);
+    const parts = x.parts.filter(p => IT(p.id)).map(p => `${esc(IT(p.id).name)}×${p.q}`).join("、") || `<span class="warn">中身が未設定</span>`;
+    return `<tr><td class="nw"><button class="x" data-act="up" data-id="${x.id}" aria-label="上へ" ${i ? "" : "disabled"}>▲</button><button class="x" data-act="down" data-id="${x.id}" aria-label="下へ" ${i < list.length - 1 ? "" : "disabled"}>▼</button></td>
+      <td>${swatchHTML(x)}</td>
+      <td><input type="text" class="req" data-f="item:${x.id}:name" value="${esc(x.name)}" aria-label="セット名"></td>
+      <td class="r"><input type="number" class="req" data-f="item:${x.id}:price" inputmode="numeric" value="${esc(x.price)}" aria-label="価格"></td>
+      <td style="min-width:11rem">${parts} <button class="tbtn" data-act="editSet" data-id="${x.id}">${S.openSet === x.id ? "閉じる" : "中身を変える"}</button></td>
+      <td class="out">${r == null ? "―" : r}</td>
+      <td class="c"><button class="x" data-act="delItem" data-id="${x.id}" id="del-${x.id}" aria-label="消す">×</button></td></tr>
+`;
+  }).join("");
+  $("secSets").innerHTML = `<div class="sec-h"><h2>セット</h2><p class="lead">「新刊＋既刊セット」のように、まとめて売る商品です。売れると中身の商品の残りが減ります。セットの残りは、中身の残りから作れる数です。</p></div>
+  ${list.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>並び</th><th>色</th><th>セット名</th><th class="r">価格（円）</th><th>中身</th><th class="r">残り</th><th class="c">消す</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
+  ${setEditor()}
+  <div class="acts"><button class="ghost" data-act="addSet" ${base.length ? "" : "disabled"}>＋ セットを足す</button>${base.length ? "" : `<span class="lead">先に商品を登録してください。</span>`}</div>`;
+}
+function setEditor() {
+  const x = IT(S.openSet); if (!x || !x.set) return "";
+  return `<div class="subopt"><h3>「${esc(x.name)}」の中身</h3><span class="lead">セット1つに入る数を入れてください（0か空欄は入れない）。</span><div class="form">${singles().map(b => { const p = x.parts.find(p => p.id === b.id); return `<div class="field"><label for="sp-${x.id}-${b.id}">${esc(b.name)}</label><input type="number" id="sp-${x.id}-${b.id}" data-f="part:${x.id}:${b.id}" inputmode="numeric" min="0" value="${p ? p.q : ""}" placeholder="0"></div>`; }).join("")}</div><div class="acts"><button class="ghost" data-act="editSet" data-id="${x.id}">閉じる</button></div></div>`;
+}
+function renderImport() {
+  $("secImport").innerHTML = `<div class="sec-h"><h2>同人誌収支ツールから商品を取り込む</h2><p class="lead">収支ツールの「保存と読み込み」で「書き出す」を押して出た文字を、下に貼り付けます。頒布物の名前と、選んだ頒布先の紙の価格が入ります。同じ名前の商品があれば、価格だけ書き換えます。</p></div>
+  <textarea class="io" id="impText" placeholder="ここに収支ツールの書き出しを貼り付け"></textarea>
+  <div class="acts"><button class="ghost" data-act="impRead">貼り付けた内容を読む</button></div>
+  <div id="impOut"></div>`;
+}
+let IMP = null;
+function renderImpOut() {
+  if (!IMP) { $("impOut").innerHTML = ""; return; }
+  const chs = IMP.channels || [];
+  const ch = chs.find(c => c.id === IMP.ch);
+  const rows = IMP.products.map(p => { const row = (p.chans || []).find(r => r.ch === IMP.ch); const price = row && has(row.pp) ? n(row.pp) : has(p.tryPrice) ? n(p.tryPrice) : "";
+    return `<tr><td class="c"><input type="checkbox" data-imp="${p.id}" ${IMP.pick[p.id] ? "checked" : ""} aria-label="取り込む"></td><td>${esc(p.name)}</td><td class="out">${price === "" ? "―" : yen(price)}</td><td class="out">${has(p.qty) ? n(p.qty) : "―"}</td></tr>`; }).join("");
+  $("impOut").innerHTML = `<div class="subopt">
+    <div class="field"><label for="impCh">どの頒布先の価格を使うか</label><select id="impCh" data-impch="1">${chs.map(c => `<option value="${c.id}" ${c.id === IMP.ch ? "selected" : ""}>${esc(c.name)}</option>`).join("")}<option value="" ${!ch ? "selected" : ""}>選ばない（かんたん試算の価格）</option></select></div>
+    <div class="tbl-wrap"><table class="t"><thead><tr><th class="c">取り込む</th><th>頒布物</th><th class="r">価格</th><th class="r">作った数</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="lead">在庫は取り込みません。その日に持っていく数を、商品の表の「在庫」に入れてください。</p>
+    <div class="acts"><button class="btn" data-act="impDo">選んだ商品を取り込む</button><button class="ghost" data-act="impCancel">やめる</button></div></div>`;
+}
+
+/* ── 履歴と集計 ── */
+function renderLog() {
+  const ev = EV(), t = totals(ev), sold = soldMap(ev);
+  const valid = ev.sales.filter(s => !s.void);
+  const paid = valid.filter(s => s.pay !== "free");
+  $("secSum").innerHTML = `<h2>${esc(ev.name)} の集計 <span class="lead">（取り消した会計は除く）</span></h2>
+  <div class="tiles">
+    <div class="tile main"><span class="k">売上合計</span><span class="v">${yen(t.sales)}</span><span class="d">現金 ${yen(t.cash)}／キャッシュレス ${yen(t.less)}${t.disc ? `／値引き −${yen(t.disc)}` : ""}</span></div>
+    <div class="tile"><span class="k">会計</span><span class="v">${t.count}件</span><span class="d">商品 ${t.items}点${paid.length ? `／1会計の平均 ${yen(t.sales / paid.length)}` : ""}</span></div>
+    <div class="tile main"><span class="k">箱の中にあるはず</span><span class="v">${yen(t.box)}</span><span class="d">${S.split ? (() => { const bd = boxDen(ev); return `お釣りの入れもの ${yen(bd.chgBox)}／代金の入れもの ${yen(bd.saleBox)}${bd.noRecv ? `／どちらか不明 ${yen(bd.noRecv)}` : ""}`; })() : `最初 ${yen(n(ev.start))}＋現金の売上 ${yen(t.cash)}${t.moves ? `${t.moves > 0 ? "＋" : "−"}出し入れ ${yen(Math.abs(t.moves))}` : ""}`}</span></div>
+    ${t.free ? `<div class="tile free"><span class="k">無料で渡した分</span><span class="v">${yen(t.free)}</span><span class="d">価格で数えた額。売上には入りません</span></div>` : ""}
+  </div>`;
+  renderRank(ev, t, sold, valid);
+  renderSlots(ev, valid);
+  renderBox(ev, t);
+  renderSales(ev);
+}
+function soldOutTimes(ev) {
+  const used = {}, out = {};
+  ev.sales.filter(s => !s.void).sort((a, b) => a.t - b.t).forEach(s => s.lines.forEach(l => (l.parts || [{ id: l.id, q: 1 }]).forEach(p => {
+    used[p.id] = (used[p.id] || 0) + n(p.q) * n(l.qty); const st = stockOf(ev, p.id);
+    if (st != null && !out[p.id] && used[p.id] >= st) out[p.id] = s.t; })));
+  return out;
+}
+const RANKS = { n: "売れた数", amt: "金額（売上に占める割合も同じ順）", thru: "在庫に対して売れた割合", pace: "売れるペースの速い順" };
+function renderRank(ev, t, sold, valid) {
+  const by = {};
+  valid.forEach(s => s.lines.forEach(l => { const o = by[l.id] || (by[l.id] = { id: l.id, name: l.name, prices: new Set(), n: 0, f: 0, amt: 0 }); o.prices.add(n(l.price)); if (s.pay === "free") o.f += l.qty; else { o.n += l.qty; o.amt += n(l.price) * l.qty; } }));
+  const outT = soldOutTimes(ev), lineSum = Object.values(by).reduce((a, o) => a + o.amt, 0);
+  const list = Object.values(by).map(o => { const x = IT(o.id); const st = x && !x.set ? stockOf(ev, x.id) : null;
+    // 売れるペース：開始から（品切れならその時刻まで、そうでなければ最後の会計まで）の時間 ÷ 売れた数
+    const st0 = slotStart(ev, valid), last = valid.length ? Math.max(...valid.map(s => s.t)) : null;
+    const span = st0 != null && last != null ? ((outT[o.id] || last) - st0) / 60000 : null;
+    const k = o.n + o.f, per = span != null && span > 0 && k ? span / k : null;
+    return { ...o, x, st, r: x ? itemRemain(ev, x, sold) : null, share: lineSum ? o.amt / lineSum : 0, thru: st ? (o.n + o.f) / st : null, per, pace: per ? 1 / per : null }; });
+  const key = RANKS[S.rankBy] ? S.rankBy : "n";
+  list.sort((a, b) => (b[key] ?? -1) - (a[key] ?? -1) || b.amt - a.amt);
+  let prev = null, rank = 0; list.forEach((o, i) => { const v = o[key] ?? -1; if (v !== prev) rank = i + 1; prev = v; o.rank = rank; });
+  const pct = v => (v == null ? "―" : (Math.round(v * 1000) / 10).toFixed(1) + "%");
+  const rows = list.map(o => `<tr><td class="out">${o.rank}</td><td>${esc(o.x ? o.x.name : o.name)}${o.x && o.x.set ? ` <span class="tag">セット</span>` : ""}</td>
+    <td class="out">${o.prices.size > 1 ? "複数" : yen([...o.prices][0])}</td><td class="out">${o.n}</td><td class="out">${o.f || "―"}</td><td class="out">${yen(o.amt)}</td>
+    <td class="out">${pct(o.share)}</td><td class="out">${o.st == null ? "―" : o.st}</td><td class="out">${o.r == null ? "―" : o.r}</td><td class="out">${pct(o.thru)}</td><td class="out">${o.per == null ? "―" : (o.per < 10 ? o.per.toFixed(1) : Math.round(o.per)) + "分に1つ"}</td><td class="out">${outT[o.id] ? hm(outT[o.id]) : "―"}</td></tr>`).join("");
+  // 一緒に買われた組み合わせ
+  const pairs = {};
+  valid.forEach(s => { const ids = [...new Set(s.lines.map(l => l.id))].sort(); for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { const k = ids[i] + "|" + ids[j]; pairs[k] = (pairs[k] || 0) + 1; } });
+  const nm = id => esc(IT(id)?.name || valid.flatMap(s => s.lines).find(l => l.id === id)?.name || "");
+  const pr = Object.entries(pairs).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, c], i) => { const [a, b] = k.split("|"); return `<tr><td class="out">${i + 1}</td><td>${nm(a)} ＋ ${nm(b)}</td><td class="out">${c}件</td></tr>`; }).join("");
+  $("secByItem").innerHTML = `<div class="sec-h"><h2>商品ごとのランキング</h2><p class="lead">セットで売れた分はセットの行に出ます（中身の商品の残りからは引いてあります）。売れた割合は、無料で渡した分も含めて在庫で割っています。ペースは、開始の時刻から最後の会計（品切れした商品は品切れの時刻）までを売れた数で割った「何分に1つ売れたか」です。品切れは、残りが0になった会計の時刻です。売上に占める割合は金額と同じ順になるので、並べ順には入れていません。</p></div>
+  <div class="acts"><label for="rankBy" class="k">並べ順</label><select id="rankBy" data-rank="1">${Object.entries(RANKS).map(([k, v]) => `<option value="${k}" ${k === key ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+  <div class="tbl-wrap"><table class="t"><thead><tr><th class="r">順位</th><th>商品</th><th class="r">価格</th><th class="r">売れた数</th><th class="r">無料</th><th class="r">金額</th><th class="r">売上の割合</th><th class="r">在庫</th><th class="r">残り</th><th class="r">売れた割合</th><th class="r">ペース</th><th class="r">品切れ</th></tr></thead>
+  <tbody>${rows || `<tr><td colspan="12" class="dash">まだ会計がありません</td></tr>`}</tbody>
+  ${list.length ? `<tfoot>${t.disc ? `<tr><td></td><td>値引き</td><td></td><td></td><td></td><td class="out">−${yen(t.disc)}</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>` : ""}<tr><td></td><td>売上合計</td><td></td><td class="out">${list.reduce((a, o) => a + o.n, 0)}</td><td class="out">${list.reduce((a, o) => a + o.f, 0) || "―"}</td><td class="out">${yen(lineSum - t.disc)}</td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tfoot>` : ""}</table></div>
+  ${pr ? `<h3>一緒に買われた組み合わせ</h3><div class="tbl-wrap"><table class="t"><thead><tr><th class="r">順位</th><th>組み合わせ</th><th class="r">会計の数</th></tr></thead><tbody>${pr}</tbody></table></div>` : ""}`;
+}
+function slotStart(ev, valid) {
+  const d = new Date(ev.date ? ev.date + "T00:00" : valid[0]?.t || Date.now());
+  if (ev.open) { const [h, m] = ev.open.split(":").map(Number); d.setHours(h, m, 0, 0); return d.getTime(); }
+  if (!valid.length) return null;
+  const f = new Date(Math.min(...valid.map(s => s.t))); f.setMinutes(0, 0, 0); return f.getTime();
+}
+function renderSlots(ev, valid) {
+  const step = n(S.slotMin) || 30, st = slotStart(ev, valid);
+  let rows = "", best = null, matrix = "";
+  if (st != null && valid.length) {
+    let endT = Math.max(...valid.map(s => s.t));
+    if (ev.close && ev.date) { const [h, m] = ev.close.split(":").map(Number); const c = new Date(ev.date + "T00:00"); c.setHours(h, m, 0, 0); endT = Math.max(endT, c.getTime() - 1); }
+    const first = Math.min(st, ...valid.map(s => s.t));
+    const base = st - Math.ceil((st - first) / (step * 60000)) * step * 60000;
+    const slots = [];
+    for (let a = base; a <= endT; a += step * 60000) slots.push({ a, b: a + step * 60000, c: 0, k: 0, amt: 0 });
+    valid.forEach(s => { const sl = slots.find(x => s.t >= x.a && s.t < x.b); if (!sl) return; sl.c++; sl.k += s.lines.reduce((a, l) => a + n(l.qty), 0); sl.amt += s.total; sl.it = sl.it || {}; s.lines.forEach(l => { sl.it[l.id] = (sl.it[l.id] || 0) + n(l.qty); }); });
+    const ids = S.items.map(x => x.id).filter(id => slots.some(x => x.it && x.it[id]));
+    valid.forEach(s => s.lines.forEach(l => { if (!ids.includes(l.id)) ids.push(l.id); }));
+    const nmOf = id => IT(id)?.name || valid.flatMap(s => s.lines).find(l => l.id === id)?.name || "";
+    matrix = `<h3>商品ごとの時間帯別の数</h3><p class="lead">上と同じ区切りで、商品が何個売れたかを出します（無料で渡した分も含みます）。横に長いときは、表を横にずらして見てください。</p>
+    <div class="tbl-wrap"><table class="t mx"><thead><tr><th>商品</th>${slots.map(x => `<th class="r">${hm(x.a)}〜</th>`).join("")}<th class="r">計</th></tr></thead><tbody>
+    ${ids.map(id => { const tot = slots.reduce((a, x) => a + ((x.it || {})[id] || 0), 0); const mx = Math.max(...slots.map(x => (x.it || {})[id] || 0)); return `<tr><td>${esc(nmOf(id))}</td>${slots.map(x => { const v = (x.it || {})[id] || 0; return `<td class="out ${v && v === mx ? "top" : ""}">${v || "·"}</td>`; }).join("")}<td class="out"><b>${tot}</b></td></tr>`; }).join("")}</tbody></table></div><p class="lead">太字の青は、その商品がいちばん売れた時間帯です。</p>`;
+    const max = Math.max(1, ...slots.map(x => x.amt));
+    const ord = slots.slice().sort((x, y) => y.amt - x.amt || y.c - x.c); let pv = null, rk = 0; ord.forEach((x, i) => { if (x.amt !== pv) rk = i + 1; pv = x.amt; x.rank = x.amt || x.c ? rk : null; });
+    best = ord[0] && ord[0].c ? ord[0] : null;
+    const show = S.slotSort === "amt" ? ord : slots;
+    rows = show.map(x => `<tr class="${best && x === best ? "here" : ""}"><td class="out">${hm(x.a)}〜${hm(x.b)}</td><td class="out">${x.rank ?? "―"}</td><td class="out">${x.c}</td><td class="out">${x.k}</td><td class="out">${yen(x.amt)}</td><td style="width:30%;min-width:5rem"><div class="bar"><i style="width:${(x.amt / max) * 100}%"></i></div></td></tr>`).join("");
+  }
+  $("secSlot").innerHTML = `<div class="sec-h"><h2>時間帯ごとの売上</h2><p class="lead">「商品と準備」の開始の時刻から、決めた分ごとに区切って集計します（開始の時刻がなければ、最初の会計の時刻から）。金額は値引き後、無料で渡した分は会計の数にだけ入ります。</p></div>
+  <div class="acts"><label for="slotMin" class="k">区切り</label><select id="slotMin" data-slot="1">${[10, 15, 20, 30, 60, 120].map(m => `<option value="${m}" ${m === step ? "selected" : ""}>${m}分ごと</option>`).join("")}</select>
+    <label for="slotSort" class="k">並べ順</label><select id="slotSort" data-slotsort="1"><option value="time" ${S.slotSort !== "amt" ? "selected" : ""}>時刻の順</option><option value="amt" ${S.slotSort === "amt" ? "selected" : ""}>金額の多い順</option></select></div>
+  ${best ? `<p><b>いちばん売れた時間帯：</b><span class="num">${hm(best.a)}〜${hm(best.b)}</span>（${best.c}件・${yen(best.amt)}）</p>` : ""}
+  <div class="tbl-wrap"><table class="t"><thead><tr><th class="r">時間帯</th><th class="r">順位</th><th class="r">会計</th><th class="r">点数</th><th class="r">金額</th><th></th></tr></thead>
+  <tbody>${rows || `<tr><td colspan="6" class="dash">まだ会計がありません</td></tr>`}</tbody></table></div>
+  ${matrix}`;
+}
+function renderBox(ev, t) {
+  const mv = ev.moves.slice().reverse().map(m => `<tr><td class="out">${hm(m.t)}</td>${S.split ? `<td>${m.box === "sale" ? "代金" : "お釣り"}</td>` : ""}<td class="wrap">${esc(m.memo || "")}${m.den ? `<br><span class="lead">${denText(m.den)}</span>` : ""}</td><td class="out">${n(m.amount) > 0 ? "＋" : "−"}${yen(Math.abs(n(m.amount)))}</td><td class="c"><button class="x" data-act="delMove" data-id="${m.id}" id="dm-${m.id}" aria-label="消す">×</button></td></tr>`).join("");
+  const diff = has(ev.counted) ? n(ev.counted) - t.box : null;
+  const bd = boxDen(ev);
+  const usedDen = bd.known || ev.sales.some(s => !s.void && s.recv) || ev.moves.some(m => m.den);
+  let den = "";
+  if (usedDen) {
+    const mvd = {}; ev.moves.forEach(m => { if (!m.den) return; const sg = n(m.amount) < 0 ? -1 : 1; DENOMS.forEach(d => { if (m.den[d]) mvd[d] = (mvd[d] || 0) + sg * n(m.den[d]); }); });
+    const recv = {}, chg = {}; ev.sales.forEach(s => { if (s.void || s.pay !== "cash" || !s.recv) return; DENOMS.forEach(d => { recv[d] = (recv[d] || 0) + n(s.recv[d]); chg[d] = (chg[d] || 0) + n((s.chg || {})[d]); }); });
+    den = `<h3>あるはずの金種</h3><div class="tbl-wrap"><table class="t"><thead><tr><th>金種</th><th class="r">最初</th><th class="r">もらった</th><th class="r">お釣りで出した</th><th class="r">出し入れ</th><th class="r">あるはず</th><th class="r">金額</th>${S.split ? `<th class="r">お釣りの入れもの</th><th class="r">代金の入れもの</th>` : ""}</tr></thead><tbody>
+    ${DENOMS.map(d => `<tr><td>${dname(d)}</td><td class="out">${n((ev.startDen || {})[d]) || "―"}</td><td class="out">${recv[d] || "―"}</td><td class="out">${chg[d] || "―"}</td><td class="out">${mvd[d] ? (mvd[d] > 0 ? "＋" : "") + mvd[d] : "―"}</td><td class="out ${bd.cnt[d] < 0 ? "neg" : ""}">${bd.cnt[d]}枚</td><td class="out">${yen(bd.cnt[d] * d)}</td>${S.split ? `<td class="out ${bd.cntC[d] < 0 ? "neg" : ""}">${bd.cntC[d]}枚</td><td class="out">${bd.cntS[d]}枚</td>` : ""}</tr>`).join("")}</tbody>
+    <tfoot><tr><td>金種がわかる額</td><td></td><td></td><td></td><td></td><td></td><td class="out">${yen(t.box - bd.unknown)}</td>${S.split ? "<td></td><td></td>" : ""}</tr><tr><td>内訳がわからない額</td><td></td><td></td><td></td><td></td><td></td><td class="out">${yen(bd.unknown)}</td>${S.split ? "<td></td><td></td>" : ""}</tr></tfoot></table></div>
+    <p class="lead">内訳がわからない額は、現金ボタンを使わずに決済した現金・金種を入れていない出し入れ・枚数で入れていない釣り銭の分です。${DENOMS.some(d => bd.cnt[d] < 0) ? `<b class="warn">マイナスの金種があります。</b>お釣りの内訳どおりに渡していないか、釣り銭の枚数が違うかもしれません。` : ""}</p>`;
+  }
+  $("secBox").innerHTML = `<div class="sec-h"><h2>箱の中のお金</h2><p class="lead">両替や買い出しで箱からお金を抜いた・足したときに記録すると、「箱の中にあるはず」の額に入ります。キャッシュレスの売上は箱に入らないので数えません。</p></div>
+  <div class="form">
+    ${S.split ? `<div class="field"><label for="mvBox">どちらの入れものか</label><select id="mvBox"><option value="chg">お釣りの入れもの</option><option value="sale">代金の入れもの</option></select></div>` : ""}
+    <div class="field"><label for="mvAmt">金額</label><input type="number" id="mvAmt" inputmode="numeric" min="0" placeholder="1000"></div>
+    <div class="field"><label for="mvMemo">メモ</label><input type="text" id="mvMemo" lang="ja" list="mvMemoList" placeholder="両替・お昼代など"><datalist id="mvMemoList">${[...new Set(["両替", "お昼代", "買い出し", ...S.events.flatMap(e => e.moves.map(m => m.memo)).filter(Boolean)])].map(v => `<option value="${esc(v)}">`).join("")}</datalist>
+      <div class="chips">${["両替", "お昼代", "買い出し"].map(v => `<button class="chip" data-act="memo" data-v="${v}">${v}</button>`).join("")}</div><span class="hint">よく使うメモは押すだけで入ります。前に入れたメモも候補に出ます。</span></div>
+  </div>
+  <details class="mvden" ${S.mvDenOpen ? "open" : ""}><summary>金種で入れる（入れると金額は枚数から計算）</summary>
+    <div class="dentbl">${DENOMS.map(d => `<div class="field"><label for="mv-${d}">${dname(d)}</label><input type="number" id="mv-${d}" inputmode="numeric" min="0" placeholder="0"></div>`).join("")}</div></details>
+  <div class="acts"><button class="ghost" data-act="move" data-v="out">箱から抜いた</button><button class="ghost" data-act="move" data-v="in">箱に足した</button></div>
+  ${mv ? `<div class="tbl-wrap"><table class="t"><thead><tr><th class="r">時刻</th>${S.split ? "<th>入れもの</th>" : ""}<th>メモ・金種</th><th class="r">金額</th><th class="c">消す</th></tr></thead><tbody>${mv}</tbody></table></div>` : ""}
+  ${S.split ? `<h3>入れものごとの額</h3><div class="tiles"><div class="tile"><span class="k">お釣りの入れもの</span><span class="v">${yen(bd.chgBox)}</span><span class="d">最初の釣り銭 − お釣りで出した額 ± 出し入れ</span></div><div class="tile"><span class="k">代金の入れもの</span><span class="v">${yen(bd.saleBox)}</span><span class="d">もらったお金 ± 出し入れ</span></div></div>
+  ${bd.noRecv ? `<p class="warn">現金ボタンを使わずに決済した現金 ${yen(bd.noRecv)} 分は、もらった額とお釣りがわからないので、上の2つには入っていません（2つを足すと、この分だけ「箱の中にあるはず」より少なくなります）。</p>` : ""}` : ""}
+  ${den}
+  <div class="subopt"><div class="field"><label for="evCounted">数えた額（箱の中を数えたら）</label><input type="number" id="evCounted" data-f="ev.counted" inputmode="numeric" value="${esc(ev.counted)}" placeholder="―" style="max-width:12rem"></div>
+  <p data-out="diff" class="${diff ? "warn" : "lead"}">${diffText(diff)}</p></div>`;
+}
+const SORTS = { "t-desc": "日時の新しい順", "t-asc": "日時の古い順", "a-desc": "金額の高い順", "a-asc": "金額の低い順" };
+const LF = () => (S.logF = S.logF || { slot: "", from: "", to: "", items: [], mode: "or", pay: "", hideVoid: false });
+function renderSales(ev) {
+  const f = LF();
+  const hours = [...new Set(ev.sales.map(s => new Date(s.t).getHours()))].sort((a, b) => a - b);
+  const names = [...new Map(ev.sales.flatMap(s => s.lines).map(l => [l.id, IT(l.id)?.name || l.name])).entries()];
+  const toMin = v => { if (!v) return null; const [h, m] = v.split(":").map(Number); return h * 60 + m; };
+  let list = ev.sales.filter(s => {
+    const d = new Date(s.t), mm = d.getHours() * 60 + d.getMinutes();
+    if (f.slot === "range") { const a = toMin(f.from), b = toMin(f.to); if (a != null && mm < a) return false; if (b != null && mm > b) return false; }
+    else if (f.slot !== "" && d.getHours() !== Number(f.slot)) return false;
+    if (f.items.length) { const ids = new Set(s.lines.map(l => l.id)); if (f.mode === "and" ? !f.items.every(i => ids.has(i)) : !f.items.some(i => ids.has(i))) return false; }
+    if (f.pay && s.pay !== f.pay) return false;
+    if (f.hideVoid && s.void) return false;
+    return true;
+  });
+  const so = S.logSort || "t-desc";
+  list.sort((a, b) => so === "t-asc" ? a.t - b.t : so === "a-desc" ? b.total - a.total || b.t - a.t : so === "a-asc" ? a.total - b.total || b.t - a.t : b.t - a.t);
+  const fsum = list.filter(s => !s.void).reduce((a, s) => a + s.total, 0);
+  const on = f.slot !== "" || f.items.length || f.pay || f.hideVoid;
+  const ss = list.map(s => `<tr class="${s.void ? "void" : ""}"><td class="out">${hm(s.t)}</td>
+    <td class="wrap">${s.lines.map(l => `${esc(l.name)}×${l.qty}`).join("、")}${n(s.disc) ? `、値引き−${yen(n(s.disc))}` : ""}</td>
+    <td class="c"><span class="tag ${s.pay === "cash" ? "cash" : s.pay === "less" ? "less" : ""}">${PAY[s.pay]}</span></td>
+    <td class="out amt">${yen(s.total)}</td>
+    <td class="c">${s.void ? `<span class="tag bad">取り消し済み</span> <button class="tbtn" data-act="unvoid" data-id="${s.id}">戻す</button>` : `<button class="ghost danger" data-act="void" data-id="${s.id}" id="v-${s.id}">取り消す</button>`}</td></tr>`).join("");
+  $("secSales").innerHTML = `<div class="sec-h"><h2>会計の履歴</h2><p class="lead">打ち間違えた会計は「取り消す」を押すと、売上・在庫・箱の中の額から外れます（記録は線を引いて残ります）。</p></div>
+  <div class="filters">
+    <div class="field"><label for="lgSort">並べ替え</label><select id="lgSort" data-lg="sort">${Object.entries(SORTS).map(([k, v]) => `<option value="${k}" ${k === so ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+    <div class="field"><label for="lgSlot">時間帯</label><select id="lgSlot" data-lg="slot"><option value="">すべて</option>${hours.map(h => `<option value="${h}" ${String(h) === f.slot ? "selected" : ""}>${h}時台</option>`).join("")}<option value="range" ${f.slot === "range" ? "selected" : ""}>時刻を指定する</option></select></div>
+    <div class="field"><label for="lgPay">支払い</label><select id="lgPay" data-lg="pay"><option value="">すべて</option>${Object.entries(PAY).map(([k, v]) => `<option value="${k}" ${k === f.pay ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+  </div>
+  ${f.slot === "range" ? `<div class="subopt"><div class="acts"><input type="time" id="lgFrom" data-lg="from" value="${esc(f.from)}" aria-label="何時から"> 〜 <input type="time" id="lgTo" data-lg="to" value="${esc(f.to)}" aria-label="何時まで"></div></div>` : ""}
+  ${names.length ? `<div class="field"><span class="k">商品で絞る</span><div class="chips">${names.map(([id, nm]) => `<label class="chip ${f.items.includes(id) ? "on" : ""}"><input type="checkbox" data-lgitem="${id}" ${f.items.includes(id) ? "checked" : ""}>${esc(nm)}</label>`).join("")}</div>
+    ${f.items.length > 1 ? `<div class="subopt"><div class="acts"><label class="chk"><input type="radio" name="lgmode" data-lgmode="or" ${f.mode !== "and" ? "checked" : ""}>どれかを含む（or）</label><label class="chk"><input type="radio" name="lgmode" data-lgmode="and" ${f.mode === "and" ? "checked" : ""}>全部を含む（and）</label></div></div>` : ""}</div>` : ""}
+  <div class="acts"><label class="chk"><input type="checkbox" data-lg="hideVoid" ${f.hideVoid ? "checked" : ""}>取り消した会計を隠す</label>${on ? `<button class="tbtn" data-act="lgReset">絞り込みをやめる</button>` : ""}</div>
+  <p class="lead">${on ? `${ev.sales.length}件のうち ${list.length}件を表示（取り消しを除いた合計 ${yen(fsum)}）` : `${ev.sales.length}件`}</p>
+  <div class="tbl-wrap"><table class="t"><thead><tr><th class="r">時刻</th><th>内容</th><th class="c">支払い</th><th class="r">金額</th><th class="c">操作</th></tr></thead>
+  <tbody>${ss || `<tr><td colspan="5" class="dash">${ev.sales.length ? "条件に合う会計がありません" : "まだ会計がありません"}</td></tr>`}</tbody></table></div>
+  <div class="acts"><button class="ghost" data-act="csv">表計算用にコピー（CSV）</button><span class="lead">会計の履歴（全件）を、Excelなどに貼れる形でコピーします。</span></div>
+  <textarea class="io" id="csvOut" hidden readonly></textarea>`;
+}
+function diffText(d) {
+  if (d == null) return "閉場後などに数えた額を入れると、「あるはず」の額との差が出ます。";
+  if (d === 0) return "ぴったり合っています。";
+  return d > 0 ? `${yen(d)} 多いです。` : `${yen(-d)} 足りません。`;
+}
+
+/* ── 保存と使い方 ── */
+function renderMgmt() {
+  $("mgmtBody").innerHTML = `
+  <div class="field"><span class="k">記録の書き出しと読み込み</span>
+    <span class="hint">記録はこのブラウザに自動で保存されます。ブラウザのデータを消すと記録も消えるので、イベントが終わったら書き出して控えを取ってください。別の端末に移すときは、書き出した文字をコピーして、移した先の欄に貼り付けて「読み込む」を押します。</span>
+    <div class="acts"><button class="ghost" data-act="export">書き出す</button><button class="ghost" data-act="import">貼り付けた内容を読み込む</button><button class="ghost danger" data-act="reset" id="resetBtn">サンプルに戻す</button></div>
+    <textarea class="io" id="m-io" placeholder="ここに書き出した内容が出ます。読み込むときはここに貼り付けてください。"></textarea></div>`;
+}
+function renderHelp() {
+  $("helpBody").innerHTML = `
+  <div><h3>このツールでできること</h3><p>即売会の当日に使うレジです。商品のボタンを押してかごに入れ、合計とお釣りを見て、決済ボタンで1回の会計を終えます。売れた数・売上・在庫の残り・箱の中にあるはずのお金が自動で出ます。お金をいくら受け取ったかは入力しません。</p></div>
+  <div><h3>3つのタブ</h3><ul>
+    <li><b>レジ</b>：当日に使う画面です。タブレットの横向きでは、左に商品ボタン、右に買い物かごと合計が並びます。スマホでは縦に並び、下の「かごと決済へ」でかごまで動けます。</li>
+    <li><b>商品と準備</b>：レジの設定、イベント（日付と時刻）、釣り銭、商品と価格、その日の在庫、セットを入れます。</li>
+    <li><b>履歴と集計</b>：売上合計、商品ごとのランキング、時間帯ごとの売上、箱の中のお金（金種）、会計の一覧を見ます。</li></ul><p>3つのタブは、下にスクロールしても帯のすぐ下に出たままなので、いつでも切り替えられます。「履歴と集計」では、いちばん上の集計（売上合計・会計・箱の中にあるはず）もタブの下に出たままになります。代金とお釣りの入れものを分けているときは、「箱の中にあるはず」の下に入れものごとの額が出ます。</p></div>
+  <div><h3>はじめて使うとき</h3><ol>
+    <li>最初に出ているサンプルは、上の「サンプルを消して新しく始める」で消せます。</li>
+    <li>「商品と準備」タブで、イベント名と開始・終了の時刻、お釣り用に最初に箱に入れたお金（釣り銭）を入れます。</li>
+    <li>商品名と価格を入れます（青い枠のマス）。同人誌収支ツールに登録してあれば、取り込むこともできます。</li>
+    <li>持っていく数を「在庫」に入れておくと、残りを数えて、少なくなったら知らせます。</li>
+    <li>「レジ」タブで、商品ボタンを押して会計します。</li></ol></div>
+  <div><h3>レジの使い方</h3><ul>
+    <li>商品ボタンを押すたびに、かごの個数が1つ増えます。同じ商品は1行にまとまり、個数が数字で出ます。</li>
+    <li>個数は色でも見分けられます：<span class="legend"><span><span class="q">1</span>色なし</span><span><span class="q q2">2</span>青</span><span><span class="q q3">3</span>赤</span><span><span class="q q4">4</span>緑</span><span><span class="q q5">5</span>5つ以上は紫</span></span> 押し間違いにすぐ気づけるようにするためです。商品ボタンも、1つ入れると枠が太くなり、2つ以上でボタン全体がその色に変わります。右上には個数が出ます。</li>
+    <li>かごの「−」で1つ減らし、「＋」で1つ増やし、「×」でその商品をかごから出します。「かごを空にする」は全部出します。</li>
+    <li>値引きは、かご全体から引く額を円で入れます（数字以外は入りません）。決済するとその会計の値引きとして残り、次の会計では空に戻ります。</li>
+    <li>合計の下に「もらった額 → お釣り」が出ます。合計に合わせて、500円・1,000円単位・5,000円・10,000円などのよくある出し方を自動で選びます。点線の下の段は、小銭を足してお釣りをきりのよい額にする出し方です（例：800円に1,000円＋300円＝1,300円を出して、お釣り500円）。</li></ul></div>
+  <div><h3>決済のボタン</h3><ul>
+    <li>現金だけ・キャッシュレスだけで頒布するときは、「商品と準備」の「レジの設定」で、使わないほうの決済ボタンを隠せます（どちらか1つは表示されます）。</li>
+    <li><b>現金で決済</b>：売上に入り、箱の中にあるはずの額にも入ります。</li>
+    <li><b>キャッシュレスで決済</b>：PayPayなどで受け取ったときに押します。売上には入りますが、箱の中の額には入りません。</li>
+    <li><b>無料で渡した</b>：献本・交換など、お金をもらわずに渡したときに押します。在庫は減り、売上には入りません。</li>
+    <li>決済すると下にお知らせが出て、そこの「取り消す」で直前の会計を取り消せます。お知らせが消えたあとは、かごの下の「直前の会計を取り消す」か、履歴の「取り消す」を使います。</li></ul></div>
+  <div><h3>現金ボタン（もらったお金を数える）</h3><p>「商品と準備」タブの「レジの設定」で「現金ボタンを表示する」にチェックを入れると、レジの商品ボタンの下に、お札と硬貨のボタンが出ます。上の段がお札、下の段が硬貨で、それぞれ大きい額から並びます。どの金種を出すかは、チェックのすぐ下の「表示する金種」で選べます（はじめは10,000・5,000・1,000円札と500・100・50・10円玉）。受け取ったお金を1枚ずつ押すと、かごの下に「もらった」額・お釣り・お釣りの内訳が出ます。押し間違えたら「1枚戻す」、最初からなら「数え直す」です。足りないときは「あと○円足りません」と出て、現金で決済できません。お釣りの内訳は大きい金種から使います（5,000円のお釣りなら5,000円札1枚）。釣り銭を枚数で入れてあれば、箱にない金種は使いません。</p><p>実際に違う金種で渡すときは、内訳の横の「内訳を直す」で、金種ごとに−・＋で枚数を直します。合計がお釣りと合わないうちは現金で決済できません。「自動の内訳に戻す」で元に戻せます。受け取ったお金や合計が変わると、自動の内訳に戻ります。</p><p>ボタンを押さずに「現金で決済」しても使えます。その会計の金種は「内訳がわからない額」として数えるだけで、売上や箱の中の合計額は変わりません。途中で表示を切り替えても大丈夫です。</p></div>
+  <div><h3>釣り銭の内訳</h3><p>「商品と準備」タブの「釣り銭」で、お札・硬貨の枚数を入れると、その合計が「最初に箱に入れたお金」に自動で入ります（このときは合計の欄は直せません）。「枚数を全部消す」（2回押して確定）で枚数を空にすると、合計を手で入れられます。</p><p>代金とお釣りを別の入れものに分けているときは、「代金とお釣りを別の入れものに分けている」にチェックを入れます。「履歴と集計」の箱の中のお金に、お釣りの入れもの（最初の釣り銭−お釣りで出した額±出し入れ）と代金の入れもの（もらったお金±出し入れ）の額と金種が分かれて出ます。お釣りの内訳は、お釣りの入れものにある金種（と、もらったお金）から決めます。現金ボタンを使わない会計は、もらった額とお釣りがわからないので、どちらの入れものにも入れず、別に表示します。枚数を入れておくと、「履歴と集計」の「あるはずの金種」で、箱の中に何円札・何円玉が何枚あるはずかが出ます。</p></div>
+  <div><h3>在庫と品切れ</h3><p>「商品と準備」タブの「在庫」は、そのイベントに持っていく数です。入れた商品だけ、商品ボタンに「残り○」が出ます。「残り少ない」に数を入れておくと、残りがその数以下になったときにボタンの文字が赤くなり、決済のお知らせでも知らせます。残りが0になると「品切れ」になってボタンが薄くなり、押せなくなります。かごに入っている分も数えるので、残りより多くはかごに入りません。在庫が空欄の商品は数えないので、いくつでも入ります。商品の表の下の「在庫を全部消す」「残り少ないを全部消す」で、まとめて空にできます（2回押して確定）。</p></div>
+  <div><h3>セット</h3><p>「新刊＋既刊セット」のように、まとめて売る商品を作れます。「中身を変える」で、セット1つに入る商品と数を決めます。セットが売れると中身の商品の残りが減ります。セット自体に在庫は入れず、中身の残りから作れる数が「残り」に出ます。</p></div>
+  <div><h3>箱の中のお金</h3><p>箱の中にあるはずの額は「最初に箱に入れたお金＋現金の売上＋足した額−抜いた額」です。両替や買い出しで出し入れしたときは「履歴と集計」タブの「箱の中のお金」で記録してください。メモは「両替」「お昼代」「買い出し」のボタンを押すと入り、前に入れたメモも候補に出ます。「金種で入れる」を開いて枚数を入れると、金額は枚数から計算し、あるはずの金種にも反映します（入れなければ金額だけの記録になります）。入れものを分けているときは、どちらの入れものかも選びます。閉場後などに箱の中を数えたら「数えた額」に入れると、あるはずの額との差が出ます。</p><p>釣り銭を枚数で入れたか、現金ボタンを使った会計があると、「あるはずの金種」の表が出ます。最初の枚数＋もらった枚数−お釣りで出した枚数±出し入れの枚数です。金種のわからない現金（ボタンを使わない会計・金種を入れていない出し入れ・枚数を入れていない釣り銭）は、下の「内訳がわからない額」にまとめます。お釣りを内訳どおりに渡さなかったときは、実際の枚数とずれます。</p></div>
+  <div><h3>ランキングと時間帯</h3><ul>
+    <li><b>商品ごとのランキング</b>：「並べ順」で、売れた数・金額・在庫に対して売れた割合・売れるペースを選べます。売上に占める割合は金額と必ず同じ順になるので、表に数字だけ出しています。ペースは「何分に1つ売れたか」で、開始の時刻から最後の会計（品切れした商品は品切れの時刻）までの時間を売れた数で割っています。品切れした商品は、品切れになった会計の時刻も出ます。同じ順位は同じ番号になります。</li>
+    <li><b>一緒に買われた組み合わせ</b>：同じ会計で買われた商品の組み合わせを、多い順に5つまで出します。</li>
+    <li><b>時間帯ごとの売上</b>：開始の時刻から、選んだ分（10〜120分）ごとに会計・点数・金額をまとめます。いちばん売れた時間帯は色が付きます。「並べ順」で金額の多い順にもできます。</li>
+    <li><b>商品ごとの時間帯別の数</b>：同じ区切りで、商品ごとに何個売れたかを表にします。その商品がいちばん売れた時間帯は青の太字になります。</li></ul></div>
+  <div><h3>会計の履歴の並べ替えと絞り込み</h3><p>「並べ替え」で日時・金額の昇順・降順を選べます。「時間帯」は、履歴にある時間（○時台）から選ぶか、「時刻を指定する」で何時から何時までを入れます。「商品で絞る」で商品を2つ以上選ぶと、「どれかを含む（or）」か「全部を含む（and）」かを選べます。ほかに支払いの種類と、取り消した会計を隠すこともできます。表の下に、絞った会計の合計が出ます。</p></div>
+  <div><h3>打ち間違えたとき</h3><p>決済したあとで間違いに気づいたら、会計を取り消して、もう一度打ち直します。取り消した会計は売上・在庫・箱の中の額から外れ、履歴には線を引いて残ります。取り消しを間違えたときは「戻す」で元に戻せます。</p></div>
+  <div><h3>イベントごとの記録</h3><p>記録はイベントごとに分かれます。次のイベントでは「商品と準備」タブの「新しいイベントを作る」を押すと、商品はそのまま、在庫の数・時刻・釣り銭を引き継いだ新しいイベントになります（在庫は持っていく数に直してください）。前のイベントの記録は「表示しているイベント」で選ぶと見られます。</p></div>
+  <div><h3>同人誌収支ツールから取り込む</h3><p>収支ツールで「書き出す」を押して出た文字を、「商品と準備」タブのいちばん下に貼り付けて「貼り付けた内容を読む」を押します。どの頒布先の価格を使うかを選び、取り込む頒布物にチェックを入れて「選んだ商品を取り込む」を押してください。同じ名前の商品があれば、価格だけ書き換えます。在庫は取り込みません。</p></div>
+  <div><h3>表計算用にコピー</h3><p>「履歴と集計」タブの「表計算用にコピー（CSV）」で、会計の一覧（日時・内容・支払い・金額）をコピーできます。Excelやスプレッドシートに貼り付けると、1行に1つの商品で並びます。</p></div>
+  <div><h3>画面の見方</h3><ul>
+    <li>青く塗ったボタンは大事な操作（現金で決済など）、枠のボタンは普通の操作です。赤い枠のボタンは消す・取り消す操作です。</li>
+    <li>青い枠のマスは、使うのに必要な欄です（イベント名・商品名・価格）。</li>
+    <li>商品の色は、レジのボタンの左端の色です。スマホなど幅の狭い画面では、色の四角を押すたびに次の色に変わります。</li>
+    <li>赤い文字は、品切れ・残り少ない・合わないなどの注意です。</li></ul></div>
+  <div><h3>保存について</h3><p>記録はこのブラウザに自動で保存されます。電波のない会場でも、そのまま使えます。ブラウザのデータを消すと記録も消えるので、イベントが終わったら「保存と読み込み」の「書き出す」で控えを取ってください。<b>この画面は試作版です。</b></p></div>`;
+}
+
+function renderAll(pop) {
+  renderTabs(); renderBand(); renderReg(pop); renderSettings(); renderEvent(); renderItems(); renderSets(); renderImport(); renderImpOut(); renderLog(); renderMgmt(); renderHelp();
+}
+function softRender(pop) { renderBand(); renderReg(pop); }
+
+/* お知らせ */
+let toastT = null;
+function toast(html, opts = {}) {
+  clearTimeout(toastT);
+  $("toastBox").innerHTML = `<div class="toast ${opts.bad ? "bad" : ""}" role="status"><span>${html}</span>${opts.undo ? `<button data-act="undoLast">取り消す</button>` : ""}</div>`;
+  toastT = setTimeout(() => { $("toastBox").innerHTML = ""; }, opts.ms || 5000);
+}
+
+/* ── 操作 ── */
+function addToCart(id) {
+  const x = IT(id); if (!x) return;
+  const ev = EV(), sold = soldMap(ev), need = cartNeed();
+  if (x.set && !x.parts.length) { toast("このセットは中身が決まっていません", { bad: true }); return; }
+  if (canMore(ev, x, sold, need) <= 0) { toast(`${esc(x.name)}は残りがありません`, { bad: true }); return; }
+  const c = S.cart.find(c => c.id === id);
+  if (c) c.qty++; else S.cart.push({ id, name: x.name, price: x.price, qty: 1 });
+  save(); softRender(id);
+  const b = document.querySelector(`.gbtn[data-id="${id}"]`); if (b) b.classList.add("flash");
+}
+function checkout(pay) {
+  if (!S.cart.length) return;
+  const ev = EV();
+  const lines = S.cart.map(c => { const x = IT(c.id); return { id: c.id, name: c.name, price: n(c.price), qty: c.qty, ...(x && x.set ? { parts: x.parts.map(p => ({ ...p })) } : {}) }; });
+  const sub = lines.reduce((a, l) => a + l.price * l.qty, 0);
+  const disc = pay === "free" ? 0 : Math.min(sub, n(S.disc));
+  const total = pay === "free" ? 0 : sub - disc;
+  const sale = { id: uid(), t: Date.now(), lines, sub, disc, total, pay };
+  const rm = recvMap(), rs = denSum(rm);
+  if (pay === "cash" && S.cashMode && rs > 0) {
+    if (rs < total) { toast(`もらったお金が ${yen(total - rs)} 足りません`, { bad: true }); return; }
+    const c2 = changeOf(ev, rm, rs - total);
+    if (c2.diff) { toast("お釣りの内訳の合計が合っていません。内訳を直してください", { bad: true }); return; }
+    sale.recv = rm; sale.chg = c2.out;
+  }
+  ev.sales.push(sale);
+  // 残り少ない・品切れになった商品を知らせる
+  const sold = soldMap(ev); const alerts = [];
+  const touched = new Set(); lines.forEach(l => (l.parts || [{ id: l.id }]).forEach(p => touched.add(p.id)));
+  touched.forEach(id => { const x = IT(id); if (!x) return; const r = remain(ev, id, sold); if (r == null) return;
+    if (r <= 0) alerts.push(`${esc(x.name)}が品切れです`); else if (isLow(x, r)) alerts.push(`${esc(x.name)}は残り${r}`); });
+  S.cart = []; S.disc = ""; S.recv = []; S.chgOv = null; S.chgEdit = false;
+  save(); renderAll();
+  toast(`${PAY[pay]}で決済しました（${yen(total)}${sale.recv && rs - total ? `・お釣り ${yen(rs - total)}` : ""}）${alerts.length ? `<br><b>${alerts.join("／")}</b>` : ""}`, { undo: true, ms: alerts.length ? 9000 : 6000, bad: alerts.length > 0 });
+}
+function undoLast() {
+  const ev = EV(); const s = ev.sales.slice().reverse().find(s => !s.void); if (!s) return;
+  s.void = true; save(); renderAll();
+  toast(`${hm(s.t)}の会計（${yen(s.total)}）を取り消しました。履歴の「戻す」で元に戻せます`);
+}
+function move(i, d) { const x = S.items[i], same = S.items.map((y, k) => [y, k]).filter(([y]) => y.set === x.set).map(([, k]) => k); const at = same.indexOf(i), j = same[at + d]; if (j == null) return; [S.items[i], S.items[j]] = [S.items[j], S.items[i]]; }
+
+let armed = null;
+function arm(btn, label, fn) {
+  if (armed === btn.id) { armed = null; fn(); return; }
+  armed = btn.id; btn.classList.add("armed"); btn.textContent = label;
+  setTimeout(() => { if (armed === btn.id) { armed = null; renderAll(); } }, 3000);
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b || b.disabled) return;
+  const act = b.dataset.act, id = b.dataset.id, ev = EV();
+  if (act === "add") { addToCart(id); return; }
+  if (act === "inc") { addToCart(id); return; }
+  if (act === "dec") { const c = S.cart.find(c => c.id === id); if (!c) return; c.qty--; if (c.qty <= 0) S.cart = S.cart.filter(x => x !== c); save(); softRender(id); return; }
+  if (act === "rm") { S.cart = S.cart.filter(c => c.id !== id); save(); softRender(); return; }
+  if (act === "clear") { S.cart = []; S.disc = ""; S.recv = []; save(); softRender(); return; }
+  if (act === "nodisc") { S.disc = ""; save(); softRender(); return; }
+  if (act === "recv") { S.recv.push(Number(b.dataset.v)); save(); softRender(); return; }
+  if (act === "chgEdit") { S.chgEdit = !S.chgEdit; save(); softRender(); return; }
+  if (act === "chgAuto") { S.chgOv = null; save(); softRender(); return; }
+  if (act === "chgInc" || act === "chgDec") { const rm = recvMap(), amt = denSum(rm) - cartTotal(); const c2 = changeOf(EV(), rm, amt); const out = { ...c2.out }; const d = b.dataset.v; out[d] = Math.max(0, n(out[d]) + (act === "chgInc" ? 1 : -1)); S.chgOv = { key: JSON.stringify(rm) + "|" + amt, out }; save(); softRender(); return; }
+  if (act === "memo") { $("mvMemo").value = b.dataset.v; return; }
+  if (act === "recvBack") { S.recv.pop(); save(); softRender(); return; }
+  if (act === "recvClear") { S.recv = []; save(); softRender(); return; }
+  if (act === "lgReset") { S.logF = null; save(); renderSales(ev); return; }
+  if (act === "pay") { checkout(b.dataset.v); return; }
+  if (act === "undoLast") { $("toastBox").innerHTML = ""; undoLast(); return; }
+  if (act === "toCart") { $("side").scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+  if (act === "tab") { S.tab = b.dataset.v; save(); renderTabs(); renderReg(); if (S.tab === "log") renderLog(); window.scrollTo({ top: 0 }); fitSide(); return; }
+  if (act === "help") { $("helpBox").open = true; $("helpBox").scrollIntoView({ behavior: "smooth" }); return; }
+  if (act === "fresh") { const ev2 = newEvent("新しいイベント"); S = { items: [], events: [ev2], current: ev2.id, tab: "item", cart: [], disc: "", recv: [], cashMode: !!S.cashMode, sample: false }; save(); renderAll(); window.scrollTo({ top: 0 }); return; }
+  if (act === "color") { const x = IT(id); if (x) x.color = b.dataset.v; }
+  else if (act === "up" || act === "down") { const i = S.items.findIndex(x => x.id === id); if (i >= 0) move(i, act === "up" ? -1 : 1); }
+  else if (act === "addItem") { const x = newItem(); x.color = COLORS[singles().length % COLORS.length]; const lastSingle = S.items.map(y => y.set).lastIndexOf(false); S.items.splice(lastSingle + 1, 0, x); S.sample = false; }
+  else if (act === "addSet") { const x = newItem("新しいセット"); x.set = true; x.color = COLORS[4]; S.items.push(x); S.openSet = x.id; S.sample = false; }
+  else if (act === "editSet") { S.openSet = S.openSet === id ? null : id; }
+  else if (act === "delItem") { const x = IT(id); return arm(b, "もう一度押すと消します", () => { S.items = S.items.filter(y => y.id !== id); S.items.forEach(y => { if (y.set) y.parts = y.parts.filter(p => p.id !== id); }); S.cart = S.cart.filter(c => c.id !== id); save(); renderAll(); }); }
+  else if (act === "newEvent") { const e2 = newEvent(); e2.stock = { ...ev.stock }; e2.start = ev.start; e2.startDen = { ...(ev.startDen || {}) }; e2.open = ev.open || ""; e2.close = ev.close || ""; S.events.push(e2); S.current = e2.id; S.cart = []; S.disc = ""; }
+  else if (act === "delEvent") { return arm(b, `もう一度押すと「${ev.name}」の記録を全部消します`, () => { S.events = S.events.filter(e => e.id !== ev.id); S.current = S.events[0].id; S.cart = []; save(); renderAll(); }); }
+  else if (act === "move") { const den = {}; DENOMS.forEach(d => { const el = $("mv-" + d); if (el && n(el.value) > 0) den[d] = n(el.value); });
+    const a = hasDen(den) ? denSum(den) : n($("mvAmt").value); if (!a) { $("mvAmt").focus(); return; }
+    const m = { id: uid(), t: Date.now(), amount: b.dataset.v === "out" ? -Math.abs(a) : Math.abs(a), memo: $("mvMemo").value };
+    if (hasDen(den)) m.den = den; if (S.split) m.box = $("mvBox").value; ev.moves.push(m); }
+  else if (act === "clrDen") { return arm(b, "もう一度押すと枚数を全部消します", () => { ev.startDen = {}; save(); renderAll(); }); }
+  else if (act === "clrStock") { return arm(b, "もう一度押すと在庫を全部消します", () => { ev.stock = {}; save(); renderAll(); }); }
+  else if (act === "clrLow") { return arm(b, "もう一度押すと全部消します", () => { singles().forEach(x => { x.low = ""; }); save(); renderAll(); }); }
+  else if (act === "delMove") { return arm(b, "もう一度押すと消します", () => { ev.moves = ev.moves.filter(m => m.id !== id); save(); renderAll(); }); }
+  else if (act === "void") { return arm(b, "もう一度押すと取り消します", () => { const s = ev.sales.find(s => s.id === id); if (s) s.void = true; save(); renderAll(); }); }
+  else if (act === "unvoid") { const s = ev.sales.find(s => s.id === id); if (s) delete s.void; }
+  else if (act === "csv") { const rows = [["日時", "イベント", "支払い", "商品", "価格", "個数", "小計", "値引き", "会計の金額", "取り消し"]];
+    ev.sales.forEach(s => s.lines.forEach((l, i) => rows.push([mdhm(s.t), ev.name, PAY[s.pay], l.name, l.price, l.qty, l.price * l.qty, i ? "" : n(s.disc) || "", i ? "" : s.total, s.void ? "取り消し" : ""])));
+    const txt = rows.map(r => r.map(v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\n");
+    const o = $("csvOut"); o.hidden = false; o.value = txt; o.select(); try { navigator.clipboard.writeText(txt).then(() => { b.textContent = "コピーしました"; }, () => {}); } catch (_) {} return; }
+  else if (act === "impRead") { try { const o = JSON.parse($("impText").value); if (o.format !== "doujin-shushi" || !o.data?.products) throw 0;
+      const d = o.data; const evCh = (d.channels || []).find(c => c.type === "event"); IMP = { products: d.products, channels: d.channels || [], ch: evCh ? evCh.id : (d.channels?.[0]?.id || ""), pick: Object.fromEntries(d.products.map(p => [p.id, true])) }; renderImpOut(); }
+    catch (_) { $("impOut").innerHTML = `<p class="warn">読み込めませんでした。収支ツールで書き出した内容を、そのまま全部貼り付けてください。</p>`; } return; }
+  else if (act === "impCancel") { IMP = null; renderImpOut(); return; }
+  else if (act === "impDo") { if (!IMP) return; let add = 0, upd = 0;
+    IMP.products.filter(p => IMP.pick[p.id]).forEach(p => { const row = (p.chans || []).find(r => r.ch === IMP.ch); const price = row && has(row.pp) ? n(row.pp) : has(p.tryPrice) ? n(p.tryPrice) : "";
+      const ex = singles().find(x => x.name === p.name); if (ex) { if (price !== "") ex.price = price; upd++; } else { const x = newItem(p.name, price, p.color || COLORS[0]); const lastSingle = S.items.map(y => y.set).lastIndexOf(false); S.items.splice(lastSingle + 1, 0, x); add++; } });
+    IMP = null; S.sample = false; save(); renderAll(); $("impOut").innerHTML = `<p class="lead">${add}件を足し、${upd}件の価格を書き換えました。在庫は商品の表で入れてください。</p>`; return; }
+  else if (act === "export") { $("m-io").value = JSON.stringify({ format: "doujin-regi", version: 1, data: { ...S, cart: [], disc: "" } }); $("m-io").select(); try { navigator.clipboard.writeText($("m-io").value).then(() => { b.textContent = "コピーしました"; }, () => {}); } catch (_) {} return; }
+  else if (act === "import") { try { const o = JSON.parse($("m-io").value); if (o.format !== "doujin-regi" || !o.data?.items || !o.data?.events?.length) throw 0; S = o.data; S.sample = false; fix(); save(); renderAll(); toast("読み込みました"); } catch (_) { b.textContent = "読み込めませんでした。書き出した内容をそのまま貼ってください"; } return; }
+  else if (act === "reset") { return arm(b, "もう一度押すと、今の記録を消してサンプルに戻します", () => { S = sample(); save(); renderAll(); }); }
+  else return;
+  save(); renderAll();
+});
+
+document.addEventListener("input", e => {
+  const el = e.target, f = el.dataset.f; if (!f) return;
+  const ev = EV(), v = el.value;
+  if (f === "disc") { const dg = v.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/[^0-9]/g, ""); S.disc = dg === "" ? "" : Number(dg); save(); renderBand(); renderReg(); const d = $("discIn"); d.focus(); const L = d.value.length; try { d.setSelectionRange(L, L); } catch (_) {} return; }
+  if (f.startsWith("ev.")) { const k = f.slice(3); ev[k] = ["start", "counted"].includes(k) ? numish(v) : v;
+    if (k === "counted") { const t = totals(ev); const d = has(ev.counted) ? n(ev.counted) - t.box : null; const o = document.querySelector('[data-out="diff"]'); o.textContent = diffText(d); o.className = d ? "warn" : "lead"; }
+    save(); renderBand(); renderReg(); return; }
+  const [kind, a, b] = f.split(":");
+  if (kind === "sden") { ev.startDen = ev.startDen || {}; if (v === "") delete ev.startDen[a]; else ev.startDen[a] = Number(v);
+    const auto = hasDen(ev.startDen); if (auto) ev.start = denSum(ev.startDen); const st = $("evStart"); st.readOnly = auto; if (auto) st.value = ev.start;
+    document.querySelector('[data-out="starthint"]').textContent = auto ? "枚数から計算しています" : "枚数を入れないときは、ここに合計を入れます"; const cb = $("clrDenBtn"); if (cb) cb.disabled = !auto;
+    save(); renderBand(); renderReg(); renderLog(); return; }
+  if (kind === "item") { const x = IT(a); if (!x) return; x[b] = ["price", "low"].includes(b) ? numish(v) : v; S.cart.forEach(c => { if (c.id === a) { if (b === "name") c.name = v; if (b === "price") c.price = numish(v); } }); }
+  else if (kind === "stock") { if (v === "") delete ev.stock[a]; else ev.stock[a] = Number(v); const o = document.querySelector(`[data-out="rem:${a}"]`); const r = remain(ev, a, soldMap(ev)); if (o) o.textContent = r == null ? "―" : r; }
+  else if (kind === "part") { const x = IT(a); if (!x) return; const q = n(v); x.parts = x.parts.filter(p => p.id !== b); if (q > 0) x.parts.push({ id: b, q }); x.parts.sort((p, q2) => S.items.findIndex(i => i.id === p.id) - S.items.findIndex(i => i.id === q2.id)); }
+  S.sample = false; save(); renderBand(); renderReg(); renderLog();
+});
+document.addEventListener("change", e => {
+  const el = e.target;
+  if (el.dataset.set) { const k = el.dataset.set; S[k] = el.checked; if (k === "split") { save(); renderLog(); return; } if (k === "payCash" && !el.checked && S.payLess === false) S.payLess = true; if (k === "payLess" && !el.checked && S.payCash === false) S.payCash = true; if (!el.checked) S.recv = []; save(); renderSettings(); renderReg(); fitSide(); return; }
+  if (el.dataset.den) { const d = Number(el.dataset.den); const on = DENS_ON().filter(x => x !== d); if (el.checked) on.push(d); S.dens = on; S.recv = (S.recv || []).filter(x => on.includes(x)); save(); renderSettings(); renderReg(); return; }
+  if (el.dataset.rank) { S.rankBy = el.value; save(); renderLog(); return; }
+  if (el.dataset.slot) { S.slotMin = Number(el.value); save(); renderLog(); return; }
+  if (el.dataset.slotsort) { S.slotSort = el.value; save(); renderLog(); return; }
+  if (el.dataset.lg) { const f = LF(), k = el.dataset.lg; if (k === "sort") S.logSort = el.value; else if (k === "hideVoid") f.hideVoid = el.checked; else f[k] = el.value; save(); renderSales(EV()); return; }
+  if (el.dataset.lgitem) { const f = LF(), id = el.dataset.lgitem; f.items = el.checked ? [...f.items, id] : f.items.filter(x => x !== id); save(); renderSales(EV()); return; }
+  if (el.dataset.lgmode) { LF().mode = el.dataset.lgmode; save(); renderSales(EV()); return; }
+  if (el.dataset.pick) { S.current = el.value; S.cart = []; S.disc = ""; save(); renderAll(); return; }
+  if (el.dataset.impch !== undefined) { IMP.ch = el.value; renderImpOut(); return; }
+  if (el.dataset.imp) { IMP.pick[el.dataset.imp] = el.checked; return; }
+  if (el.dataset.f && el.dataset.f.startsWith("part:")) { save(); renderSets(); renderReg(); return; }
+  if (el.dataset.f && (el.dataset.f.endsWith(":name") || el.dataset.f === "ev.name")) { renderEvent(); renderSets(); renderLog(); }
+});
+
+load(); renderAll();
+</script>
+
+<script>
+// ホーム画面に追加したあと、ネットなしでも開けるようにする
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
