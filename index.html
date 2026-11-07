@@ -294,6 +294,8 @@ input[readonly]{background:var(--zebra);box-shadow:none}
 .toast button{font:inherit;font-weight:700;background:transparent;color:inherit;border:1.5px solid currentColor;border-radius:8px;padding:4px 10px;cursor:pointer;white-space:nowrap}
 @media (max-width:819px){.toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}}
 
+.msg{font-size:13px;font-weight:700;color:var(--good)}
+.msg.bad{color:var(--bad)}
 textarea.io{width:100%;min-height:6rem;font-family:var(--f-num);font-size:12px}
 .help{font-size:14px;display:grid;gap:12px}
 .help h3{font-size:15px;font-family:var(--f-display)}
@@ -649,7 +651,8 @@ function setEditor() {
   return `<div class="subopt"><h3>「${esc(x.name)}」の中身</h3><span class="lead">セット1つに入る数を入れてください（0か空欄は入れない）。</span><div class="form">${singles().map(b => { const p = x.parts.find(p => p.id === b.id); return `<div class="field"><label for="sp-${x.id}-${b.id}">${esc(b.name)}</label><input type="number" id="sp-${x.id}-${b.id}" data-f="part:${x.id}:${b.id}" inputmode="numeric" min="0" value="${p ? p.q : ""}" placeholder="0"></div>`; }).join("")}</div><div class="acts"><button class="ghost" data-act="editSet" data-id="${x.id}">閉じる</button></div></div>`;
 }
 function renderImport() {
-  $("secImport").innerHTML = `<div class="sec-h"><h2>同人誌収支ツールから商品を取り込む</h2><p class="lead">収支ツールの「保存と読み込み」で「書き出す」を押して出た文字を、下に貼り付けます。頒布物の名前と、選んだ頒布先の紙の価格が入ります。同じ名前の商品があれば、価格だけ書き換えます。</p></div>
+  $("secImport").innerHTML = `<div class="sec-h"><h2>同人誌収支ツールから商品を取り込む</h2><p class="lead">収支ツールの「保存と読み込み」で保存したファイルを選ぶか、「文字をコピー」した文字を下に貼り付けます。頒布物の名前と、選んだ頒布先の紙の価格が入ります。同じ名前の商品があれば、価格だけ書き換えます。</p></div>
+  <input type="file" id="impFile" accept=".json,application/json,text/plain">
   <textarea class="io" id="impText" placeholder="ここに収支ツールの書き出しを貼り付け"></textarea>
   <div class="acts"><button class="ghost" data-act="impRead">貼り付けた内容を読む</button></div>
   <div id="impOut"></div>`;
@@ -840,11 +843,35 @@ function diffText(d) {
 /* ── 保存と使い方 ── */
 function renderMgmt() {
   $("mgmtBody").innerHTML = `
-  <div class="field"><span class="k">記録の書き出しと読み込み</span>
-    <span class="hint">記録はこのブラウザに自動で保存されます。ブラウザのデータを消すと記録も消えるので、イベントが終わったら書き出して控えを取ってください。別の端末に移すときは、書き出した文字をコピーして、移した先の欄に貼り付けて「読み込む」を押します。</span>
-    <div class="acts"><button class="ghost" data-act="export">書き出す</button><button class="ghost" data-act="import">貼り付けた内容を読み込む</button><button class="ghost danger" data-act="reset" id="resetBtn">サンプルに戻す</button></div>
-    <textarea class="io" id="m-io" placeholder="ここに書き出した内容が出ます。読み込むときはここに貼り付けてください。"></textarea></div>`;
+  <div class="field"><span class="k">記録を書き出す</span>
+    <span class="hint">記録はこのブラウザに自動で保存されます。ブラウザのデータを消すと記録も消えるので、イベントが終わったらファイルに保存して控えを取ってください。別の端末に移すときにも使います。</span>
+    <div class="acts"><button class="btn" data-act="exSave">ファイルに保存</button><button class="ghost" data-act="exCopy">文字をコピー</button><span class="msg" id="exMsg" role="status"></span></div>
+    <textarea class="io" id="exOut" readonly hidden></textarea></div>
+  <div class="field"><span class="k">記録を読み込む</span>
+    <span class="hint">書き出したファイルを選ぶか、書き出した文字を下に貼り付けて「読み込む」を押します。今の記録は、読み込んだ内容に置き換わります。</span>
+    <input type="file" id="imFile" accept=".json,application/json,text/plain">
+    <textarea class="io" id="m-io" placeholder="ここに書き出した文字を貼り付け"></textarea>
+    <div class="acts"><button class="btn" data-act="import" id="importBtn">読み込む</button><span class="msg" id="imMsg" role="status"></span></div></div>
+  <div class="field"><span class="k">サンプルに戻す</span>
+    <div class="acts"><button class="ghost danger" data-act="reset" id="resetBtn">サンプルに戻す</button><span class="lead">今の記録を消して、最初のサンプルの状態に戻します。</span></div></div>`;
 }
+const exportData = () => ({ format: "doujin-regi", version: 1, data: { ...S, cart: [], disc: "", recv: [] } });
+const exportName = () => `即売会レジ_${today()}.json`;
+// 書き出し・読み込み（3つのツール共通の形：ファイルに保存／文字をコピー、ファイルか貼り付けで読み込み。結果はボタンの横に出して数秒で消す）
+function ioMsg(id, text, bad) { const el = $(id); if (!el) return; el.textContent = text; el.className = "msg" + (bad ? " bad" : ""); clearTimeout(el._t); el._t = setTimeout(() => { el.textContent = ""; }, bad ? 6000 : 4000); }
+async function saveFile(name, text) {
+  let dl = null; try { dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null; } catch (_) {}
+  if (dl) { await dl.save({ filename: name, data: text }); return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "application/json" })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function readIn(file) { if (!file) return; const fr = new FileReader(); fr.onload = () => { $("m-io").value = fr.result; ioMsg("imMsg", "ファイルを読みました。「読み込む」を押してください"); }; fr.readAsText(file); }
+async function doExport(kind, b) {
+  const text = JSON.stringify(exportData());
+  if (kind === "save") { try { await saveFile(exportName(), text); ioMsg("exMsg", "ファイルに保存しました"); } catch (e) { if (!e || e.code !== "declined") ioMsg("exMsg", "保存できませんでした。「文字をコピー」を使ってください", true); } return; }
+  try { await navigator.clipboard.writeText(text); ioMsg("exMsg", "コピーしました"); }
+  catch (_) { const o = $("exOut"); o.hidden = false; o.value = text; o.select(); ioMsg("exMsg", "下の欄に出しました。選んでコピーしてください"); }
+}
+
 function renderHelp() {
   $("helpBody").innerHTML = `
   <div><h3>このツールでできること</h3><p>即売会の当日に使うレジです。商品のボタンを押してかごに入れ、合計とお釣りを見て、決済ボタンで1回の会計を終えます。売れた数・売上・在庫の残り・箱の中にあるはずのお金が自動で出ます。お金をいくら受け取ったかは入力しません。</p></div>
@@ -883,14 +910,14 @@ function renderHelp() {
   <div><h3>会計の履歴の並べ替えと絞り込み</h3><p>「並べ替え」で日時・金額の昇順・降順を選べます。「時間帯」は、履歴にある時間（○時台）から選ぶか、「時刻を指定する」で何時から何時までを入れます。「商品で絞る」で商品を2つ以上選ぶと、「どれかを含む（or）」か「全部を含む（and）」かを選べます。ほかに支払いの種類と、取り消した会計を隠すこともできます。表の下に、絞った会計の合計が出ます。</p></div>
   <div><h3>打ち間違えたとき</h3><p>決済したあとで間違いに気づいたら、会計を取り消して、もう一度打ち直します。取り消した会計は売上・在庫・箱の中の額から外れ、履歴には線を引いて残ります。取り消しを間違えたときは「戻す」で元に戻せます。</p></div>
   <div><h3>イベントごとの記録</h3><p>記録はイベントごとに分かれます。次のイベントでは「商品と準備」タブの「新しいイベントを作る」を押すと、商品はそのまま、在庫の数・時刻・釣り銭を引き継いだ新しいイベントになります（在庫は持っていく数に直してください）。前のイベントの記録は「表示しているイベント」で選ぶと見られます。</p></div>
-  <div><h3>同人誌収支ツールから取り込む</h3><p>収支ツールで「書き出す」を押して出た文字を、「商品と準備」タブのいちばん下に貼り付けて「貼り付けた内容を読む」を押します。どの頒布先の価格を使うかを選び、取り込む頒布物にチェックを入れて「選んだ商品を取り込む」を押してください。同じ名前の商品があれば、価格だけ書き換えます。在庫は取り込みません。</p></div>
+  <div><h3>同人誌収支ツールから取り込む</h3><p>収支ツールの「保存と読み込み」で保存したファイルを、「商品と準備」タブのいちばん下で選ぶか、「文字をコピー」した文字を貼り付けて、「貼り付けた内容を読む」を押します。どの頒布先の価格を使うかを選び、取り込む頒布物にチェックを入れて「選んだ商品を取り込む」を押してください。同じ名前の商品があれば、価格だけ書き換えます。在庫は取り込みません。</p></div>
   <div><h3>表計算用にコピー</h3><p>「履歴と集計」タブの「表計算用にコピー（CSV）」で、会計の一覧（日時・内容・支払い・金額）をコピーできます。Excelやスプレッドシートに貼り付けると、1行に1つの商品で並びます。</p></div>
   <div><h3>画面の見方</h3><ul>
     <li>青く塗ったボタンは大事な操作（現金で決済など）、枠のボタンは普通の操作です。赤い枠のボタンは消す・取り消す操作です。</li>
     <li>青い枠のマスは、使うのに必要な欄です（イベント名・商品名・価格）。</li>
     <li>商品の色は、レジのボタンの左端の色です。スマホなど幅の狭い画面では、色の四角を押すたびに次の色に変わります。</li>
     <li>赤い文字は、品切れ・残り少ない・合わないなどの注意です。</li></ul></div>
-  <div><h3>保存について</h3><p>記録はこのブラウザに自動で保存されます。電波のない会場でも、そのまま使えます。ブラウザのデータを消すと記録も消えるので、イベントが終わったら「保存と読み込み」の「書き出す」で控えを取ってください。<b>この画面は試作版です。</b></p></div>`;
+  <div><h3>保存について</h3><p>記録はこのブラウザに自動で保存されます。電波のない会場でも、そのまま使えます。ブラウザのデータを消すと記録も消えるので、イベントが終わったら「保存と読み込み」の「ファイルに保存」で控えを取ってください。「文字をコピー」で文字として持ち出すこともできます。</p><p>読み込むときは、書き出したファイルを選ぶか、書き出した文字を貼り付けて「読み込む」を押します。今の記録は読み込んだ内容に置き換わるので、サンプル以外のときは2回押して確定します。結果は、押したボタンのすぐ横に出ます。<b>この画面は試作版です。</b></p></div>`;
 }
 
 function renderAll(pop) {
@@ -949,6 +976,8 @@ function undoLast() {
 }
 function move(i, d) { const x = S.items[i], same = S.items.map((y, k) => [y, k]).filter(([y]) => y.set === x.set).map(([, k]) => k); const at = same.indexOf(i), j = same[at + d]; if (j == null) return; [S.items[i], S.items[j]] = [S.items[j], S.items[i]]; }
 
+// ボタンの文字を一時的に変えて、少したったら元に戻す
+function flash(b, text, ms = 2500) { if (!b.dataset.label) b.dataset.label = b.textContent; b.textContent = text; clearTimeout(b._ft); b._ft = setTimeout(() => { b.textContent = b.dataset.label; delete b.dataset.label; }, ms); }
 let armed = null;
 function arm(btn, label, fn) {
   if (armed === btn.id) { armed = null; fn(); return; }
@@ -1000,7 +1029,7 @@ document.addEventListener("click", e => {
   else if (act === "csv") { const rows = [["日時", "イベント", "支払い", "商品", "価格", "個数", "小計", "値引き", "会計の金額", "取り消し"]];
     ev.sales.forEach(s => s.lines.forEach((l, i) => rows.push([mdhm(s.t), ev.name, PAY[s.pay], l.name, l.price, l.qty, l.price * l.qty, i ? "" : n(s.disc) || "", i ? "" : s.total, s.void ? "取り消し" : ""])));
     const txt = rows.map(r => r.map(v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\n");
-    const o = $("csvOut"); o.hidden = false; o.value = txt; o.select(); try { navigator.clipboard.writeText(txt).then(() => { b.textContent = "コピーしました"; }, () => {}); } catch (_) {} return; }
+    const o = $("csvOut"); o.hidden = false; o.value = txt; o.select(); try { navigator.clipboard.writeText(txt).then(() => { flash(b, "コピーしました"); }, () => {}); } catch (_) {} return; }
   else if (act === "impRead") { try { const o = JSON.parse($("impText").value); if (o.format !== "doujin-shushi" || !o.data?.products) throw 0;
       const d = o.data; const evCh = (d.channels || []).find(c => c.type === "event"); IMP = { products: d.products, channels: d.channels || [], ch: evCh ? evCh.id : (d.channels?.[0]?.id || ""), pick: Object.fromEntries(d.products.map(p => [p.id, true])) }; renderImpOut(); }
     catch (_) { $("impOut").innerHTML = `<p class="warn">読み込めませんでした。収支ツールで書き出した内容を、そのまま全部貼り付けてください。</p>`; } return; }
@@ -1009,8 +1038,12 @@ document.addEventListener("click", e => {
     IMP.products.filter(p => IMP.pick[p.id]).forEach(p => { const row = (p.chans || []).find(r => r.ch === IMP.ch); const price = row && has(row.pp) ? n(row.pp) : has(p.tryPrice) ? n(p.tryPrice) : "";
       const ex = singles().find(x => x.name === p.name); if (ex) { if (price !== "") ex.price = price; upd++; } else { const x = newItem(p.name, price, p.color || COLORS[0]); const lastSingle = S.items.map(y => y.set).lastIndexOf(false); S.items.splice(lastSingle + 1, 0, x); add++; } });
     IMP = null; S.sample = false; save(); renderAll(); $("impOut").innerHTML = `<p class="lead">${add}件を足し、${upd}件の価格を書き換えました。在庫は商品の表で入れてください。</p>`; return; }
-  else if (act === "export") { $("m-io").value = JSON.stringify({ format: "doujin-regi", version: 1, data: { ...S, cart: [], disc: "" } }); $("m-io").select(); try { navigator.clipboard.writeText($("m-io").value).then(() => { b.textContent = "コピーしました"; }, () => {}); } catch (_) {} return; }
-  else if (act === "import") { try { const o = JSON.parse($("m-io").value); if (o.format !== "doujin-regi" || !o.data?.items || !o.data?.events?.length) throw 0; S = o.data; S.sample = false; fix(); save(); renderAll(); toast("読み込みました"); } catch (_) { b.textContent = "読み込めませんでした。書き出した内容をそのまま貼ってください"; } return; }
+  else if (act === "exSave" || act === "exCopy") { doExport(act === "exSave" ? "save" : "copy", b); return; }
+  else if (act === "import") { let o; try { o = JSON.parse($("m-io").value); if (o.format !== "doujin-regi" || !o.data?.items || !o.data?.events?.length) throw 0; } catch (_) { ioMsg("imMsg", "読み込めませんでした。書き出したファイルか、書き出した文字をそのまま全部入れてください", true); return; }
+    const go = () => { S = o.data; S.sample = false; fix(); save(); renderAll(); ioMsg("imMsg", "読み込みました"); };
+    if (S.sample || b.classList.contains("armed")) { go(); return; }
+    // 確認中も貼り付けた文字を消さないよう、描き直さずにボタンだけ戻す
+    b.classList.add("armed"); b.textContent = "もう一度押すと、今の記録を置き換えます"; setTimeout(() => { b.classList.remove("armed"); b.textContent = "読み込む"; }, 3000); return; }
   else if (act === "reset") { return arm(b, "もう一度押すと、今の記録を消してサンプルに戻します", () => { S = sample(); save(); renderAll(); }); }
   else return;
   save(); renderAll();
@@ -1035,6 +1068,8 @@ document.addEventListener("input", e => {
 });
 document.addEventListener("change", e => {
   const el = e.target;
+  if (el.id === "imFile") { readIn(el.files[0]); return; }
+  if (el.id === "impFile") { const f = el.files[0]; if (!f) return; const fr = new FileReader(); fr.onload = () => { $("impText").value = fr.result; }; fr.readAsText(f); return; }
   if (el.dataset.set) { const k = el.dataset.set; S[k] = el.checked; if (k === "split") { save(); renderLog(); return; } if (k === "payCash" && !el.checked && S.payLess === false) S.payLess = true; if (k === "payLess" && !el.checked && S.payCash === false) S.payCash = true; if (!el.checked) S.recv = []; save(); renderSettings(); renderReg(); fitSide(); return; }
   if (el.dataset.den) { const d = Number(el.dataset.den); const on = DENS_ON().filter(x => x !== d); if (el.checked) on.push(d); S.dens = on; S.recv = (S.recv || []).filter(x => on.includes(x)); save(); renderSettings(); renderReg(); return; }
   if (el.dataset.rank) { S.rankBy = el.value; save(); renderLog(); return; }
