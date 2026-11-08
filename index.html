@@ -364,7 +364,7 @@ const PAY = { cash: "現金", less: "キャッシュレス", free: "無料" };
 
 /* ── データ ──
    items：商品（全イベント共通）。set=true はセットで、parts の中身から在庫を引く
-   events：イベントごとに 在庫・最初に箱に入れた額・会計・箱の出し入れ を持つ */
+   events：イベントごとに 在庫・最初に金庫に入れた額・会計・金庫の出し入れ を持つ */
 const newItem = (name = "新しい商品", price = "", color = COLORS[0]) => ({ id: uid(), name, price, color, set: false, parts: [], low: "" });
 const newEvent = (name = "新しいイベント") => ({ id: uid(), name, date: today(), open: "", close: "", startDen: {}, start: "", counted: "", stock: {}, sales: [], moves: [] });
 
@@ -459,9 +459,9 @@ const denSum = m => Object.entries(m || {}).reduce((a, [d, k]) => a + Number(d) 
 const hasDen = m => Object.values(m || {}).some(k => n(k) > 0);
 const recvMap = () => { const m = {}; (S.recv || []).forEach(d => { m[d] = (m[d] || 0) + 1; }); return m; };
 const denText = m => DENOMS.filter(d => n(m[d]) > 0).map(d => `${dname(d)}×${n(m[d])}`).join("、");
-// 箱の中の金種：最初の内訳＋もらった−お釣りで出した。内訳がわからない現金（金種を入れずに決済・出し入れ）は「わからない額」
+// 金庫の中の金種：最初の内訳＋もらった−お釣りで出した。内訳がわからない現金（金種を入れずに決済・出し入れ）は「わからない額」
 function boxDen(ev) {
-  // C=お釣りの入れもの S=代金の入れもの（分けていないときは合わせて使う）
+  // C=お釣り用の金庫 S=売上用の金庫（分けていないときは合わせて使う）
   const cntC = {}, cntS = {}; DENOMS.forEach(d => { cntC[d] = n((ev.startDen || {})[d]); cntS[d] = 0; });
   const known = hasDen(ev.startDen);
   let recvIn = 0, chgOut = 0, noRecv = 0, movC = 0, movS = 0;
@@ -481,12 +481,12 @@ function changeOf(ev, rm, amount) {
   if (S.chgOv && S.chgOv.key === key) { const out = { ...S.chgOv.out }; Object.keys(out).forEach(d => { if (!out[d]) delete out[d]; }); return { out, short: 0, manual: true, diff: denSum(out) !== amount }; }
   const c = makeChange(amount, availFor(ev, rm)); return { ...c, manual: false, diff: false };
 }
-// 決済のときにお釣りを出せる金種（分けているときはお釣りの入れものだけ。もらったお金も使える）
+// 決済のときにお釣りを出せる金種（分けているときはお釣り用の金庫だけ。もらったお金も使える）
 function availFor(ev, rm) {
   const bd = boxDen(ev); if (!bd.known) return null;
   const av = { ...(S.split ? bd.cntC : bd.cnt) }; DENOMS.forEach(d => { av[d] = (av[d] || 0) + n(rm[d]); }); return av;
 }
-// お釣りの内訳。箱の中身がわかるときは、ない金種を使わない
+// お釣りの内訳。金庫の中身がわかるときは、ない金種を使わない
 function makeChange(amount, avail) {
   const out = {}; let rem = amount;
   DENOMS.forEach(d => { if (d === 2000 && !(avail && avail[d] > 0)) return; let k = Math.floor(rem / d); if (avail) k = Math.min(k, Math.max(0, avail[d] || 0)); if (k > 0) { out[d] = k; rem -= k * d; } });
@@ -496,13 +496,13 @@ function makeChange(amount, avail) {
 /* ── 帯とタブ ── */
 const TABS = [
   { key: "reg", label: "レジ", sub: "商品を押して会計" },
-  { key: "item", label: "商品と準備", sub: "商品・価格・在庫・箱のお金" },
-  { key: "log", label: "履歴と集計", sub: "売れた数・売上・箱の中" },
+  { key: "item", label: "商品と準備", sub: "商品・価格・在庫・金庫のお金" },
+  { key: "log", label: "履歴と集計", sub: "売れた数・売上・金庫の中" },
 ];
 function renderBand() {
   const ev = EV(), t = totals(ev);
   $("band").innerHTML = `<div class="band-in"><div class="who"><span class="eyebrow">${TOOL}</span><h1>${esc(ev.name)}</h1></div>
-    <div class="now"><div><span>売上</span><b>${yen(t.sales)}</b></div><div><span>会計</span><b>${t.count}件</b></div><div><span>箱の中にあるはず</span><b>${yen(t.box)}</b></div></div>
+    <div class="now"><div><span>売上</span><b>${yen(t.sales)}</b></div><div><span>会計</span><b>${t.count}件</b></div><div><span>金庫にあるはず</span><b>${yen(t.box)}</b></div></div>
     <button class="helpbtn" data-act="help">使い方</button></div>`;
   $("sampleNote").hidden = !S.sample;
   syncBandH();
@@ -555,9 +555,9 @@ function renderReg(pop) {
       ${c2.diff ? `<div class="warnbox">内訳の合計が ${yen(denSum(c2.out))} です（お釣りは ${yen(rs - T)}）</div>` : ""}<div class="acts"><button class="tbtn" data-act="chgAuto">自動の内訳に戻す</button><button class="ghost" data-act="chgEdit">閉じる</button></div></div>` : "";
     recvBox = `<div class="recv"><div class="chg"><span class="a">もらった</span><span class="ar"></span><span class="b">${yen(rs)}</span></div>
       ${rs < T ? `<div class="warnbox">あと ${yen(T - rs)} 足りません</div>` : `<div class="chg big"><span class="a">お釣り</span><span class="ar"></span><span class="b">${yen(rs - T)}</span></div>
-      ${rs - T > 0 ? `<div class="lead">内訳：${denText(c2.out) || "―"}${c2.manual ? "（手で直した内訳）" : ""} ${edit ? "" : `<button class="tbtn" data-act="chgEdit">内訳を直す</button>`}</div>${!c2.manual && c2.short ? `<div class="warnbox">箱の中の小銭が足りないかもしれません（${yen(c2.short)}分）</div>` : ""}${ed}` : ""}`}</div>`;
+      ${rs - T > 0 ? `<div class="lead">内訳：${denText(c2.out) || "―"}${c2.manual ? "（手で直した内訳）" : ""} ${edit ? "" : `<button class="tbtn" data-act="chgEdit">内訳を直す</button>`}</div>${!c2.manual && c2.short ? `<div class="warnbox">金庫の中の小銭が足りないかもしれません（${yen(c2.short)}分）</div>` : ""}${ed}` : ""}`}</div>`;
   }
-  const pad = cash ? `<section class="card cashpad" id="cashpad"><div class="sec-h"><h2>もらったお金</h2><p class="lead">受け取ったお金を、お札・硬貨ごとに押します。押した分からお釣りと内訳を出し、箱の中の金種も数えます。押さずに決済すると、その会計の金種は「わからない」になります。</p></div>
+  const pad = cash ? `<section class="card cashpad" id="cashpad"><div class="sec-h"><h2>もらったお金</h2><p class="lead">受け取ったお金を、お札・硬貨ごとに押します。押した分からお釣りと内訳を出し、金庫の中の金種も数えます。押さずに決済すると、その会計の金種は「わからない」になります。</p></div>
     ${[BILLS, COINS].map((g, _, all) => { const ds = g.filter(d => DENS_ON().includes(d)).sort((a, b) => b - a); const cols = Math.max(...all.map(h => h.filter(d => DENS_ON().includes(d)).length)); return ds.length ? `<div class="dens" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${ds.map(d => `<button class="den ${d >= 1000 ? "bill" : "coin"}" data-act="recv" data-v="${d}"><span>${d.toLocaleString("ja-JP")}</span>${rm[d] ? `<b class="q ${qc(rm[d])}">${rm[d]}</b>` : ""}</button>`).join("")}</div>` : ""; }).join("")}
     <div class="acts"><span>合計 <b class="num">${yen(rs)}</b></span><button class="ghost" data-act="recvBack" ${rs ? "" : "disabled"}>1枚戻す</button><button class="ghost danger" data-act="recvClear" ${rs ? "" : "disabled"}>数え直す</button></div></section>` : "";
   $("tab-reg").innerHTML = `<div class="reg">
@@ -590,12 +590,12 @@ function renderEvent() {
   </div>
   <div class="acts"><button class="ghost" data-act="newEvent">＋ 新しいイベントを作る</button><span class="lead">今のイベントの在庫の数・時刻・釣り銭を引き継ぎます。</span></div>
   <div class="acts"><button class="ghost danger" data-act="delEvent" id="delEventBtn" ${S.events.length > 1 ? "" : "disabled"}>このイベントを消す</button>${S.events.length > 1 ? "" : `<span class="lead">イベントが1つだけのときは消せません。</span>`}</div>`;
-  $("secMoney").innerHTML = `<div class="sec-h"><h2>釣り銭（最初に箱に入れるお金）</h2><p class="lead">お釣り用に用意したお金です。お札・硬貨の枚数を入れると合計を自動で出し、「箱の中にあるはず」の金種も数えられます。枚数を入れないときは、合計だけ手で入れます。</p></div>
+  $("secMoney").innerHTML = `<div class="sec-h"><h2>釣り銭（最初に金庫に入れるお金）</h2><p class="lead">お釣り用に用意したお金です。お札・硬貨の枚数を入れると合計を自動で出し、「金庫にあるはず」の金種も数えられます。枚数を入れないときは、合計だけ手で入れます。</p></div>
   <div class="dentbl">${DENOMS.map(d => `<div class="field"><label for="sd-${d}">${dname(d)}</label><input type="number" id="sd-${d}" data-f="sden:${d}" inputmode="numeric" min="0" value="${esc((ev.startDen || {})[d] ?? "")}" placeholder="0"></div>`).join("")}</div>
-  <label class="chk"><input type="checkbox" data-set="split" ${S.split ? "checked" : ""}>代金とお釣りを別の入れものに分けている</label>
-  <div class="subopt"><p class="lead">チェックを入れると、「履歴と集計」の箱の中のお金に、お釣りの入れものと代金の入れものの額が分かれて出ます。お釣りはお釣りの入れものから出す前提で内訳を決めます。正しく分けて数えられるのは、現金ボタンを使った会計だけです。（全部のイベントで共通の設定です）</p></div>
+  <label class="chk"><input type="checkbox" data-set="split" ${S.split ? "checked" : ""}>お釣り用と売上用で金庫を分けている</label>
+  <div class="subopt"><p class="lead">チェックを入れると、「履歴と集計」の金庫のお金に、お釣り用の金庫と売上用の金庫の額が分かれて出ます。お釣りはお釣り用の金庫から出す前提で内訳を決めます。正しく分けて数えられるのは、現金ボタンを使った会計だけです。（全部のイベントで共通の設定です）</p></div>
   <div class="acts"><button class="ghost danger" data-act="clrDen" id="clrDenBtn" ${auto ? "" : "disabled"}>枚数を全部消す</button><span class="lead">枚数を消すと、合計を手で入れられるようになります。</span></div>
-  <div class="field" style="max-width:16rem"><label for="evStart">最初に箱に入れたお金（合計）</label><input type="number" id="evStart" data-f="ev.start" inputmode="numeric" value="${esc(ev.start)}" placeholder="20000" ${auto ? "readonly" : ""}><span class="hint" data-out="starthint">${auto ? "枚数から計算しています" : "枚数を入れないときは、ここに合計を入れます"}</span></div>`;
+  <div class="field" style="max-width:16rem"><label for="evStart">最初に金庫に入れたお金（合計）</label><input type="number" id="evStart" data-f="ev.start" inputmode="numeric" value="${esc(ev.start)}" placeholder="20000" ${auto ? "readonly" : ""}><span class="hint" data-out="starthint">${auto ? "枚数から計算しています" : "枚数を入れないときは、ここに合計を入れます"}</span></div>`;
 }
 const DEF_DENS = [10000, 5000, 1000, 500, 100, 50, 10];
 const DENS_ON = () => (Array.isArray(S.dens) ? S.dens : DEF_DENS);
@@ -605,7 +605,7 @@ function renderSettings() {
   <div class="field"><span class="k">決済ボタン</span><span class="hint">使う支払い方法だけ表示します。どちらか1つは表示されます。</span>
     <div class="acts"><label class="chk"><input type="checkbox" data-set="payCash" ${S.payCash !== false ? "checked" : ""}>現金で決済</label><label class="chk"><input type="checkbox" data-set="payLess" ${S.payLess !== false ? "checked" : ""}>キャッシュレスで決済</label></div></div>
   <label class="chk"><input type="checkbox" data-set="cashMode" ${S.cashMode ? "checked" : ""} ${S.payCash === false ? "disabled" : ""}>現金ボタンを表示する</label>
-  <div class="subopt"><p class="lead">レジに、お札と硬貨のボタンが出ます。もらったお金を押すと、お釣りとその内訳、箱の中の金種まで数えます。途中で切り替えても使えます。ボタンを使わずに決済した現金は「内訳がわからない額」として数え、合計額は変わりません。${S.payCash === false ? "（現金で決済を表示していないので使えません）" : ""}</p>
+  <div class="subopt"><p class="lead">レジに、お札と硬貨のボタンが出ます。もらったお金を押すと、お釣りとその内訳、金庫の中の金種まで数えます。途中で切り替えても使えます。ボタンを使わずに決済した現金は「内訳がわからない額」として数え、合計額は変わりません。${S.payCash === false ? "（現金で決済を表示していないので使えません）" : ""}</p>
   ${S.cashMode && S.payCash !== false ? `<div class="field"><span class="k">表示する金種</span><div class="chips">${DENOMS.map(d => `<label class="chip ${on.includes(d) ? "on" : ""}"><input type="checkbox" data-den="${d}" ${on.includes(d) ? "checked" : ""}>${dname(d)}</label>`).join("")}</div></div>` : ""}</div>`;
 }
 function swatchHTML(x) { const nx = COLORS[(COLORS.indexOf(x.color) + 1) % COLORS.length]; return `<button class="swcycle" style="background:${esc(x.color)}" data-act="color" data-id="${x.id}" data-v="${nx}" aria-label="押すと次の色に変わります"></button><span class="swatches">${COLORS.map(c => `<button style="background:${c}" class="${x.color === c ? "on" : ""}" data-act="color" data-id="${x.id}" data-v="${c}" aria-label="色を選ぶ"></button>`).join("")}</span>`; }
@@ -681,7 +681,7 @@ function renderLog() {
   <div class="tiles">
     <div class="tile main"><span class="k">売上合計</span><span class="v">${yen(t.sales)}</span><span class="d">現金 ${yen(t.cash)}／キャッシュレス ${yen(t.less)}${t.disc ? `／値引き −${yen(t.disc)}` : ""}</span></div>
     <div class="tile"><span class="k">会計</span><span class="v">${t.count}件</span><span class="d">商品 ${t.items}点${paid.length ? `／1会計の平均 ${yen(t.sales / paid.length)}` : ""}</span></div>
-    <div class="tile main"><span class="k">箱の中にあるはず</span><span class="v">${yen(t.box)}</span><span class="d">${S.split ? (() => { const bd = boxDen(ev); return `お釣りの入れもの ${yen(bd.chgBox)}／代金の入れもの ${yen(bd.saleBox)}${bd.noRecv ? `／どちらか不明 ${yen(bd.noRecv)}` : ""}`; })() : `最初 ${yen(n(ev.start))}＋現金の売上 ${yen(t.cash)}${t.moves ? `${t.moves > 0 ? "＋" : "−"}出し入れ ${yen(Math.abs(t.moves))}` : ""}`}</span></div>
+    <div class="tile main"><span class="k">金庫にあるはず</span><span class="v">${yen(t.box)}</span><span class="d">${S.split ? (() => { const bd = boxDen(ev); return `お釣り用の金庫 ${yen(bd.chgBox)}／売上用の金庫 ${yen(bd.saleBox)}${bd.noRecv ? `／どちらか不明 ${yen(bd.noRecv)}` : ""}`; })() : `最初 ${yen(n(ev.start))}＋現金の売上 ${yen(t.cash)}${t.moves ? `${t.moves > 0 ? "＋" : "−"}出し入れ ${yen(Math.abs(t.moves))}` : ""}`}</span></div>
     ${t.free ? `<div class="tile free"><span class="k">無料で渡した分</span><span class="v">${yen(t.free)}</span><span class="d">価格で数えた額。売上には入りません</span></div>` : ""}
   </div>`;
   renderRank(ev, t, sold, valid);
@@ -772,26 +772,26 @@ function renderBox(ev, t) {
   if (usedDen) {
     const mvd = {}; ev.moves.forEach(m => { if (!m.den) return; const sg = n(m.amount) < 0 ? -1 : 1; DENOMS.forEach(d => { if (m.den[d]) mvd[d] = (mvd[d] || 0) + sg * n(m.den[d]); }); });
     const recv = {}, chg = {}; ev.sales.forEach(s => { if (s.void || s.pay !== "cash" || !s.recv) return; DENOMS.forEach(d => { recv[d] = (recv[d] || 0) + n(s.recv[d]); chg[d] = (chg[d] || 0) + n((s.chg || {})[d]); }); });
-    den = `<h3>あるはずの金種</h3><div class="tbl-wrap"><table class="t"><thead><tr><th>金種</th><th class="r">最初</th><th class="r">もらった</th><th class="r">お釣りで出した</th><th class="r">出し入れ</th><th class="r">あるはず</th><th class="r">金額</th>${S.split ? `<th class="r">お釣りの入れもの</th><th class="r">代金の入れもの</th>` : ""}</tr></thead><tbody>
+    den = `<h3>あるはずの金種</h3><div class="tbl-wrap"><table class="t"><thead><tr><th>金種</th><th class="r">最初</th><th class="r">もらった</th><th class="r">お釣りで出した</th><th class="r">出し入れ</th><th class="r">あるはず</th><th class="r">金額</th>${S.split ? `<th class="r">お釣り用の金庫</th><th class="r">売上用の金庫</th>` : ""}</tr></thead><tbody>
     ${DENOMS.map(d => `<tr><td>${dname(d)}</td><td class="out">${n((ev.startDen || {})[d]) || "―"}</td><td class="out">${recv[d] || "―"}</td><td class="out">${chg[d] || "―"}</td><td class="out">${mvd[d] ? (mvd[d] > 0 ? "＋" : "") + mvd[d] : "―"}</td><td class="out ${bd.cnt[d] < 0 ? "neg" : ""}">${bd.cnt[d]}枚</td><td class="out">${yen(bd.cnt[d] * d)}</td>${S.split ? `<td class="out ${bd.cntC[d] < 0 ? "neg" : ""}">${bd.cntC[d]}枚</td><td class="out">${bd.cntS[d]}枚</td>` : ""}</tr>`).join("")}</tbody>
     <tfoot><tr><td>金種がわかる額</td><td></td><td></td><td></td><td></td><td></td><td class="out">${yen(t.box - bd.unknown)}</td>${S.split ? "<td></td><td></td>" : ""}</tr><tr><td>内訳がわからない額</td><td></td><td></td><td></td><td></td><td></td><td class="out">${yen(bd.unknown)}</td>${S.split ? "<td></td><td></td>" : ""}</tr></tfoot></table></div>
     <p class="lead">内訳がわからない額は、現金ボタンを使わずに決済した現金・金種を入れていない出し入れ・枚数で入れていない釣り銭の分です。${DENOMS.some(d => bd.cnt[d] < 0) ? `<b class="warn">マイナスの金種があります。</b>お釣りの内訳どおりに渡していないか、釣り銭の枚数が違うかもしれません。` : ""}</p>`;
   }
-  $("secBox").innerHTML = `<div class="sec-h"><h2>箱の中のお金</h2><p class="lead">両替や買い出しで箱からお金を抜いた・足したときに記録すると、「箱の中にあるはず」の額に入ります。キャッシュレスの売上は箱に入らないので数えません。</p></div>
+  $("secBox").innerHTML = `<div class="sec-h"><h2>金庫のお金</h2><p class="lead">両替や買い出しで金庫からお金を抜いた・足したときに記録すると、「金庫にあるはず」の額に入ります。キャッシュレスの売上は金庫に入らないので数えません。</p></div>
   <div class="form">
-    ${S.split ? `<div class="field"><label for="mvBox">どちらの入れものか</label><select id="mvBox"><option value="chg">お釣りの入れもの</option><option value="sale">代金の入れもの</option></select></div>` : ""}
+    ${S.split ? `<div class="field"><label for="mvBox">どちらの金庫か</label><select id="mvBox"><option value="chg">お釣り用の金庫</option><option value="sale">売上用の金庫</option></select></div>` : ""}
     <div class="field"><label for="mvAmt">金額</label><input type="number" id="mvAmt" inputmode="numeric" min="0" placeholder="1000"></div>
     <div class="field"><label for="mvMemo">メモ</label><input type="text" id="mvMemo" lang="ja" list="mvMemoList" placeholder="両替・お昼代など"><datalist id="mvMemoList">${[...new Set(["両替", "お昼代", "買い出し", ...S.events.flatMap(e => e.moves.map(m => m.memo)).filter(Boolean)])].map(v => `<option value="${esc(v)}">`).join("")}</datalist>
       <div class="chips">${["両替", "お昼代", "買い出し"].map(v => `<button class="chip" data-act="memo" data-v="${v}">${v}</button>`).join("")}</div><span class="hint">よく使うメモは押すだけで入ります。前に入れたメモも候補に出ます。</span></div>
   </div>
   <details class="mvden" ${S.mvDenOpen ? "open" : ""}><summary>金種で入れる（入れると金額は枚数から計算）</summary>
     <div class="dentbl">${DENOMS.map(d => `<div class="field"><label for="mv-${d}">${dname(d)}</label><input type="number" id="mv-${d}" inputmode="numeric" min="0" placeholder="0"></div>`).join("")}</div></details>
-  <div class="acts"><button class="ghost" data-act="move" data-v="out">箱から抜いた</button><button class="ghost" data-act="move" data-v="in">箱に足した</button></div>
-  ${mv ? `<div class="tbl-wrap"><table class="t"><thead><tr><th class="r">時刻</th>${S.split ? "<th>入れもの</th>" : ""}<th>メモ・金種</th><th class="r">金額</th><th class="c">消す</th></tr></thead><tbody>${mv}</tbody></table></div>` : ""}
-  ${S.split ? `<h3>入れものごとの額</h3><div class="tiles"><div class="tile"><span class="k">お釣りの入れもの</span><span class="v">${yen(bd.chgBox)}</span><span class="d">最初の釣り銭 − お釣りで出した額 ± 出し入れ</span></div><div class="tile"><span class="k">代金の入れもの</span><span class="v">${yen(bd.saleBox)}</span><span class="d">もらったお金 ± 出し入れ</span></div></div>
-  ${bd.noRecv ? `<p class="warn">現金ボタンを使わずに決済した現金 ${yen(bd.noRecv)} 分は、もらった額とお釣りがわからないので、上の2つには入っていません（2つを足すと、この分だけ「箱の中にあるはず」より少なくなります）。</p>` : ""}` : ""}
+  <div class="acts"><button class="ghost" data-act="move" data-v="out">金庫から抜いた</button><button class="ghost" data-act="move" data-v="in">金庫に足した</button></div>
+  ${mv ? `<div class="tbl-wrap"><table class="t"><thead><tr><th class="r">時刻</th>${S.split ? "<th>金庫</th>" : ""}<th>メモ・金種</th><th class="r">金額</th><th class="c">消す</th></tr></thead><tbody>${mv}</tbody></table></div>` : ""}
+  ${S.split ? `<h3>金庫ごとの額</h3><div class="tiles"><div class="tile"><span class="k">お釣り用の金庫</span><span class="v">${yen(bd.chgBox)}</span><span class="d">最初の釣り銭 − お釣りで出した額 ± 出し入れ</span></div><div class="tile"><span class="k">売上用の金庫</span><span class="v">${yen(bd.saleBox)}</span><span class="d">もらったお金 ± 出し入れ</span></div></div>
+  ${bd.noRecv ? `<p class="warn">現金ボタンを使わずに決済した現金 ${yen(bd.noRecv)} 分は、もらった額とお釣りがわからないので、上の2つには入っていません（2つを足すと、この分だけ「金庫にあるはず」より少なくなります）。</p>` : ""}` : ""}
   ${den}
-  <div class="subopt"><div class="field"><label for="evCounted">数えた額（箱の中を数えたら）</label><input type="number" id="evCounted" data-f="ev.counted" inputmode="numeric" value="${esc(ev.counted)}" placeholder="―" style="max-width:12rem"></div>
+  <div class="subopt"><div class="field"><label for="evCounted">数えた額（金庫の中を数えたら）</label><input type="number" id="evCounted" data-f="ev.counted" inputmode="numeric" value="${esc(ev.counted)}" placeholder="―" style="max-width:12rem"></div>
   <p data-out="diff" class="${diff ? "warn" : "lead"}">${diffText(diff)}</p></div>`;
 }
 const SORTS = { "t-desc": "日時の新しい順", "t-asc": "日時の古い順", "a-desc": "金額の高い順", "a-asc": "金額の低い順" };
@@ -819,7 +819,7 @@ function renderSales(ev) {
     <td class="c"><span class="tag ${s.pay === "cash" ? "cash" : s.pay === "less" ? "less" : ""}">${PAY[s.pay]}</span></td>
     <td class="out amt">${yen(s.total)}</td>
     <td class="c">${s.void ? `<span class="tag bad">取り消し済み</span> <button class="tbtn" data-act="unvoid" data-id="${s.id}">戻す</button>` : `<button class="ghost danger" data-act="void" data-id="${s.id}" id="v-${s.id}">取り消す</button>`}</td></tr>`).join("");
-  $("secSales").innerHTML = `<div class="sec-h"><h2>会計の履歴</h2><p class="lead">打ち間違えた会計は「取り消す」を押すと、売上・在庫・箱の中の額から外れます（記録は線を引いて残ります）。</p></div>
+  $("secSales").innerHTML = `<div class="sec-h"><h2>会計の履歴</h2><p class="lead">打ち間違えた会計は「取り消す」を押すと、売上・在庫・金庫の中の額から外れます（記録は線を引いて残ります）。</p></div>
   <div class="filters">
     <div class="field"><label for="lgSort">並べ替え</label><select id="lgSort" data-lg="sort">${Object.entries(SORTS).map(([k, v]) => `<option value="${k}" ${k === so ? "selected" : ""}>${v}</option>`).join("")}</select></div>
     <div class="field"><label for="lgSlot">時間帯</label><select id="lgSlot" data-lg="slot"><option value="">すべて</option>${hours.map(h => `<option value="${h}" ${String(h) === f.slot ? "selected" : ""}>${h}時台</option>`).join("")}<option value="range" ${f.slot === "range" ? "selected" : ""}>時刻を指定する</option></select></div>
@@ -875,14 +875,14 @@ async function doExport(kind, b) {
 
 function renderHelp() {
   $("helpBody").innerHTML = `
-  <div><h3>このツールでできること</h3><p>即売会の当日に使うレジです。商品のボタンを押してかごに入れ、合計とお釣りを見て、決済ボタンで1回の会計を終えます。売れた数・売上・在庫の残り・箱の中にあるはずのお金が自動で出ます。お金をいくら受け取ったかは入力しません。</p></div>
+  <div><h3>このツールでできること</h3><p>即売会の当日に使うレジです。商品のボタンを押してかごに入れ、合計とお釣りを見て、決済ボタンで1回の会計を終えます。売れた数・売上・在庫の残り・金庫にあるはずのお金が自動で出ます。お金をいくら受け取ったかは入力しません。</p></div>
   <div><h3>3つのタブ</h3><ul>
     <li><b>レジ</b>：当日に使う画面です。タブレットの横向きでは、左に商品ボタン、右に買い物かごと合計が並びます。スマホでは縦に並び、下の「かごと決済へ」でかごまで動けます。</li>
     <li><b>商品と準備</b>：レジの設定、イベント（日付と時刻）、釣り銭、商品と価格、その日の在庫、セットを入れます。</li>
-    <li><b>履歴と集計</b>：売上合計、商品ごとのランキング、時間帯ごとの売上、箱の中のお金（金種）、会計の一覧を見ます。</li></ul><p>3つのタブは、下にスクロールしても帯のすぐ下に出たままなので、いつでも切り替えられます。「履歴と集計」では、いちばん上の集計（売上合計・会計・箱の中にあるはず）もタブの下に出たままになります。代金とお釣りの入れものを分けているときは、「箱の中にあるはず」の下に入れものごとの額が出ます。</p></div>
+    <li><b>履歴と集計</b>：売上合計、商品ごとのランキング、時間帯ごとの売上、金庫のお金（金種）、会計の一覧を見ます。</li></ul><p>3つのタブは、下にスクロールしても帯のすぐ下に出たままなので、いつでも切り替えられます。「履歴と集計」では、いちばん上の集計（売上合計・会計・金庫にあるはず）もタブの下に出たままになります。お釣り用と売上用で金庫を分けているときは、「金庫にあるはず」の下に金庫ごとの額が出ます。</p></div>
   <div><h3>はじめて使うとき</h3><ol>
     <li>最初に出ているサンプルは、上の「サンプルを消して新しく始める」で消せます。</li>
-    <li>「商品と準備」タブで、イベント名と開始・終了の時刻、お釣り用に最初に箱に入れたお金（釣り銭）を入れます。</li>
+    <li>「商品と準備」タブで、イベント名と開始・終了の時刻、お釣り用に最初に金庫に入れたお金（釣り銭）を入れます。</li>
     <li>商品名と価格を入れます（青い枠のマス）。同人誌収支ツールに登録してあれば、取り込むこともできます。</li>
     <li>持っていく数を「在庫」に入れておくと、残りを数えて、少なくなったら知らせます。</li>
     <li>「レジ」タブで、商品ボタンを押して会計します。</li></ol></div>
@@ -894,22 +894,22 @@ function renderHelp() {
     <li>合計の下に「もらった額 → お釣り」が出ます。合計に合わせて、500円・1,000円単位・5,000円・10,000円などのよくある出し方を自動で選びます。点線の下の段は、小銭を足してお釣りをきりのよい額にする出し方です（例：800円に1,000円＋300円＝1,300円を出して、お釣り500円）。</li></ul></div>
   <div><h3>決済のボタン</h3><ul>
     <li>現金だけ・キャッシュレスだけで頒布するときは、「商品と準備」の「レジの設定」で、使わないほうの決済ボタンを隠せます（どちらか1つは表示されます）。</li>
-    <li><b>現金で決済</b>：売上に入り、箱の中にあるはずの額にも入ります。</li>
-    <li><b>キャッシュレスで決済</b>：PayPayなどで受け取ったときに押します。売上には入りますが、箱の中の額には入りません。</li>
+    <li><b>現金で決済</b>：売上に入り、金庫にあるはずの額にも入ります。</li>
+    <li><b>キャッシュレスで決済</b>：PayPayなどで受け取ったときに押します。売上には入りますが、金庫の中の額には入りません。</li>
     <li><b>無料で渡した</b>：献本・交換など、お金をもらわずに渡したときに押します。在庫は減り、売上には入りません。</li>
     <li>決済すると下にお知らせが出て、そこの「取り消す」で直前の会計を取り消せます。お知らせが消えたあとは、かごの下の「直前の会計を取り消す」か、履歴の「取り消す」を使います。</li></ul></div>
-  <div><h3>現金ボタン（もらったお金を数える）</h3><p>「商品と準備」タブの「レジの設定」で「現金ボタンを表示する」にチェックを入れると、レジの商品ボタンの下に、お札と硬貨のボタンが出ます。上の段がお札、下の段が硬貨で、それぞれ大きい額から並びます。どの金種を出すかは、チェックのすぐ下の「表示する金種」で選べます（はじめは10,000・5,000・1,000円札と500・100・50・10円玉）。受け取ったお金を1枚ずつ押すと、かごの下に「もらった」額・お釣り・お釣りの内訳が出ます。押し間違えたら「1枚戻す」、最初からなら「数え直す」です。足りないときは「あと○円足りません」と出て、現金で決済できません。お釣りの内訳は大きい金種から使います（5,000円のお釣りなら5,000円札1枚）。釣り銭を枚数で入れてあれば、箱にない金種は使いません。</p><p>実際に違う金種で渡すときは、内訳の横の「内訳を直す」で、金種ごとに−・＋で枚数を直します。合計がお釣りと合わないうちは現金で決済できません。「自動の内訳に戻す」で元に戻せます。受け取ったお金や合計が変わると、自動の内訳に戻ります。</p><p>ボタンを押さずに「現金で決済」しても使えます。その会計の金種は「内訳がわからない額」として数えるだけで、売上や箱の中の合計額は変わりません。途中で表示を切り替えても大丈夫です。</p></div>
-  <div><h3>釣り銭の内訳</h3><p>「商品と準備」タブの「釣り銭」で、お札・硬貨の枚数を入れると、その合計が「最初に箱に入れたお金」に自動で入ります（このときは合計の欄は直せません）。「枚数を全部消す」（2回押して確定）で枚数を空にすると、合計を手で入れられます。</p><p>代金とお釣りを別の入れものに分けているときは、「代金とお釣りを別の入れものに分けている」にチェックを入れます。「履歴と集計」の箱の中のお金に、お釣りの入れもの（最初の釣り銭−お釣りで出した額±出し入れ）と代金の入れもの（もらったお金±出し入れ）の額と金種が分かれて出ます。お釣りの内訳は、お釣りの入れものにある金種（と、もらったお金）から決めます。現金ボタンを使わない会計は、もらった額とお釣りがわからないので、どちらの入れものにも入れず、別に表示します。枚数を入れておくと、「履歴と集計」の「あるはずの金種」で、箱の中に何円札・何円玉が何枚あるはずかが出ます。</p></div>
+  <div><h3>現金ボタン（もらったお金を数える）</h3><p>「商品と準備」タブの「レジの設定」で「現金ボタンを表示する」にチェックを入れると、レジの商品ボタンの下に、お札と硬貨のボタンが出ます。上の段がお札、下の段が硬貨で、それぞれ大きい額から並びます。どの金種を出すかは、チェックのすぐ下の「表示する金種」で選べます（はじめは10,000・5,000・1,000円札と500・100・50・10円玉）。受け取ったお金を1枚ずつ押すと、かごの下に「もらった」額・お釣り・お釣りの内訳が出ます。押し間違えたら「1枚戻す」、最初からなら「数え直す」です。足りないときは「あと○円足りません」と出て、現金で決済できません。お釣りの内訳は大きい金種から使います（5,000円のお釣りなら5,000円札1枚）。釣り銭を枚数で入れてあれば、金庫にない金種は使いません。</p><p>実際に違う金種で渡すときは、内訳の横の「内訳を直す」で、金種ごとに−・＋で枚数を直します。合計がお釣りと合わないうちは現金で決済できません。「自動の内訳に戻す」で元に戻せます。受け取ったお金や合計が変わると、自動の内訳に戻ります。</p><p>ボタンを押さずに「現金で決済」しても使えます。その会計の金種は「内訳がわからない額」として数えるだけで、売上や金庫の中の合計額は変わりません。途中で表示を切り替えても大丈夫です。</p></div>
+  <div><h3>釣り銭の内訳</h3><p>「商品と準備」タブの「釣り銭」で、お札・硬貨の枚数を入れると、その合計が「最初に金庫に入れたお金」に自動で入ります（このときは合計の欄は直せません）。「枚数を全部消す」（2回押して確定）で枚数を空にすると、合計を手で入れられます。</p><p>お釣り用と売上用で金庫を分けているときは、「お釣り用と売上用で金庫を分けている」にチェックを入れます。「履歴と集計」の金庫のお金に、お釣り用の金庫（最初の釣り銭−お釣りで出した額±出し入れ）と売上用の金庫（もらったお金±出し入れ）の額と金種が分かれて出ます。お釣りの内訳は、お釣り用の金庫にある金種（と、もらったお金）から決めます。現金ボタンを使わない会計は、もらった額とお釣りがわからないので、どちらの金庫にも入れず、別に表示します。枚数を入れておくと、「履歴と集計」の「あるはずの金種」で、金庫の中に何円札・何円玉が何枚あるはずかが出ます。</p></div>
   <div><h3>在庫と品切れ</h3><p>「商品と準備」タブの「在庫」は、そのイベントに持っていく数です。入れた商品だけ、商品ボタンに「残り○」が出ます。「残り少ない」に数を入れておくと、残りがその数以下になったときにボタンの文字が赤くなり、決済のお知らせでも知らせます。残りが0になると「品切れ」になってボタンが薄くなり、押せなくなります。かごに入っている分も数えるので、残りより多くはかごに入りません。在庫が空欄の商品は数えないので、いくつでも入ります。商品の表の下の「在庫を全部消す」「残り少ないを全部消す」で、まとめて空にできます（2回押して確定）。</p></div>
   <div><h3>セット</h3><p>「新刊＋既刊セット」のように、まとめて売る商品を作れます。「中身を変える」で、セット1つに入る商品と数を決めます。セットが売れると中身の商品の残りが減ります。セット自体に在庫は入れず、中身の残りから作れる数が「残り」に出ます。</p></div>
-  <div><h3>箱の中のお金</h3><p>箱の中にあるはずの額は「最初に箱に入れたお金＋現金の売上＋足した額−抜いた額」です。両替や買い出しで出し入れしたときは「履歴と集計」タブの「箱の中のお金」で記録してください。メモは「両替」「お昼代」「買い出し」のボタンを押すと入り、前に入れたメモも候補に出ます。「金種で入れる」を開いて枚数を入れると、金額は枚数から計算し、あるはずの金種にも反映します（入れなければ金額だけの記録になります）。入れものを分けているときは、どちらの入れものかも選びます。閉場後などに箱の中を数えたら「数えた額」に入れると、あるはずの額との差が出ます。</p><p>釣り銭を枚数で入れたか、現金ボタンを使った会計があると、「あるはずの金種」の表が出ます。最初の枚数＋もらった枚数−お釣りで出した枚数±出し入れの枚数です。金種のわからない現金（ボタンを使わない会計・金種を入れていない出し入れ・枚数を入れていない釣り銭）は、下の「内訳がわからない額」にまとめます。お釣りを内訳どおりに渡さなかったときは、実際の枚数とずれます。</p></div>
+  <div><h3>金庫のお金</h3><p>金庫にあるはずの額は「最初に金庫に入れたお金＋現金の売上＋足した額−抜いた額」です。両替や買い出しで出し入れしたときは「履歴と集計」タブの「金庫のお金」で記録してください。メモは「両替」「お昼代」「買い出し」のボタンを押すと入り、前に入れたメモも候補に出ます。「金種で入れる」を開いて枚数を入れると、金額は枚数から計算し、あるはずの金種にも反映します（入れなければ金額だけの記録になります）。金庫を分けているときは、どちらの金庫かも選びます。閉場後などに金庫の中を数えたら「数えた額」に入れると、あるはずの額との差が出ます。</p><p>釣り銭を枚数で入れたか、現金ボタンを使った会計があると、「あるはずの金種」の表が出ます。最初の枚数＋もらった枚数−お釣りで出した枚数±出し入れの枚数です。金種のわからない現金（ボタンを使わない会計・金種を入れていない出し入れ・枚数を入れていない釣り銭）は、下の「内訳がわからない額」にまとめます。お釣りを内訳どおりに渡さなかったときは、実際の枚数とずれます。</p></div>
   <div><h3>ランキングと時間帯</h3><ul>
     <li><b>商品ごとのランキング</b>：「並べ順」で、売れた数・金額・在庫に対して売れた割合・売れるペースを選べます。売上に占める割合は金額と必ず同じ順になるので、表に数字だけ出しています。ペースは「何分に1つ売れたか」で、開始の時刻から最後の会計（品切れした商品は品切れの時刻）までの時間を売れた数で割っています。品切れした商品は、品切れになった会計の時刻も出ます。同じ順位は同じ番号になります。</li>
     <li><b>一緒に買われた組み合わせ</b>：同じ会計で買われた商品の組み合わせを、多い順に5つまで出します。</li>
     <li><b>時間帯ごとの売上</b>：開始の時刻から、選んだ分（10〜120分）ごとに会計・点数・金額をまとめます。いちばん売れた時間帯は色が付きます。「並べ順」で金額の多い順にもできます。</li>
     <li><b>商品ごとの時間帯別の数</b>：同じ区切りで、商品ごとに何個売れたかを表にします。その商品がいちばん売れた時間帯は青の太字になります。</li></ul></div>
   <div><h3>会計の履歴の並べ替えと絞り込み</h3><p>「並べ替え」で日時・金額の昇順・降順を選べます。「時間帯」は、履歴にある時間（○時台）から選ぶか、「時刻を指定する」で何時から何時までを入れます。「商品で絞る」で商品を2つ以上選ぶと、「どれかを含む（or）」か「全部を含む（and）」かを選べます。ほかに支払いの種類と、取り消した会計を隠すこともできます。表の下に、絞った会計の合計が出ます。</p></div>
-  <div><h3>打ち間違えたとき</h3><p>決済したあとで間違いに気づいたら、会計を取り消して、もう一度打ち直します。取り消した会計は売上・在庫・箱の中の額から外れ、履歴には線を引いて残ります。取り消しを間違えたときは「戻す」で元に戻せます。</p></div>
+  <div><h3>打ち間違えたとき</h3><p>決済したあとで間違いに気づいたら、会計を取り消して、もう一度打ち直します。取り消した会計は売上・在庫・金庫の中の額から外れ、履歴には線を引いて残ります。取り消しを間違えたときは「戻す」で元に戻せます。</p></div>
   <div><h3>イベントごとの記録</h3><p>記録はイベントごとに分かれます。次のイベントでは「商品と準備」タブの「新しいイベントを作る」を押すと、商品はそのまま、在庫の数・時刻・釣り銭を引き継いだ新しいイベントになります（在庫は持っていく数に直してください）。前のイベントの記録は「表示しているイベント」で選ぶと見られます。</p></div>
   <div><h3>同人誌収支ツールから取り込む</h3><p>収支ツールの「保存と読み込み」で保存したファイルを、「商品と準備」タブのいちばん下で選ぶか、「文字をコピー」した文字を貼り付けて、「貼り付けた内容を読む」を押します。どの頒布先の価格を使うかを選び、取り込む頒布物にチェックを入れて「選んだ商品を取り込む」を押してください。同じ名前の商品があれば、価格だけ書き換えます。在庫は取り込みません。</p></div>
   <div><h3>表計算用にコピー</h3><p>「履歴と集計」タブの「表計算用にコピー（CSV）」で、会計の一覧（日時・内容・支払い・金額）をコピーできます。Excelやスプレッドシートに貼り付けると、1行に1つの商品で並びます。</p></div>
