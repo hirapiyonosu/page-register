@@ -148,6 +148,12 @@ tr.void td.amt{text-decoration:line-through}
 .swatches button.on{outline:2px solid var(--ink);outline-offset:1px}
 .swcycle{display:none;width:30px;height:30px;border-radius:6px;border:1.5px solid var(--btn-line);cursor:pointer;padding:0;box-shadow:var(--btn-shadow)}
 @media (max-width:700px){.swatches{display:none}.swcycle{display:inline-block}table.t input[type=number]{width:4.4rem}table.t input[type=text]{min-width:7rem}}
+.cons-b{display:grid;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+table.t.settle{max-width:420px}
+table.t.settle tr.total td{font-weight:700;border-top:1.5px solid var(--line);border-bottom:0;font-size:15px}
+table.t td small{font-size:11px;color:var(--sub);margin-left:2px}
+ul.tight{margin:0;padding-left:1.2em;display:grid;gap:2px}
+.io-out{width:100%;min-height:7rem;font-family:var(--f-num);font-size:12px}
 .tag{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:0 8px;border:1px solid var(--field-line);color:var(--sub);white-space:nowrap}
 .tag.bad{border-color:var(--bad);color:var(--bad)}
 .tag.cash{border-color:var(--ink);color:var(--ink)}
@@ -321,11 +327,13 @@ textarea.io{width:100%;min-height:6rem;font-family:var(--f-num);font-size:12px}
     <section class="card" id="secMoney"></section>
     <section class="card" id="secItems"></section>
     <section class="card" id="secSets"></section>
+    <section class="card" id="secCons"></section>
     <section class="card" id="secImport"></section>
   </div>
   <div class="pane" id="tab-log" hidden>
     <section class="card" id="secSum"></section>
     <section class="card" id="secByItem"></section>
+    <section class="card" id="secConsLog" hidden></section>
     <section class="card" id="secSlot"></section>
     <section class="card" id="secBox"></section>
     <section class="card" id="secSales"></section>
@@ -376,7 +384,7 @@ function sample() {
   const s = newItem("新刊＋既刊セット（サンプル）", 1200, COLORS[4]); s.set = true; s.parts = [{ id: a.id, q: 1 }, { id: b.id, q: 1 }];
   const ev = newEvent("イベントA（サンプル）"); ev.start = 20000; ev.open = "10:30"; ev.close = "15:30";
   ev.stock = { [a.id]: 100, [b.id]: 6, [c.id]: 20, [d.id]: 50 };
-  return { items: [a, b, c, d, s], events: [ev], current: ev.id, tab: "reg", cart: [], disc: "", recv: [], cashMode: false, sample: true };
+  return { items: [a, b, c, d, s], cons: [], events: [ev], current: ev.id, tab: "reg", cart: [], disc: "", recv: [], cashMode: false, sample: true };
 }
 
 let S;
@@ -386,7 +394,7 @@ function load() {
 }
 function fix() {
   S.cart = Array.isArray(S.cart) ? S.cart : []; S.recv = Array.isArray(S.recv) ? S.recv : []; S.events.forEach(e => { e.startDen = e.startDen || {}; }); S.disc = S.disc ?? "";
-  S.items.forEach(x => { x.parts = x.parts || []; });
+  S.items.forEach(x => { x.parts = x.parts || []; x.from = x.from || ""; }); S.cons = Array.isArray(S.cons) ? S.cons : [];
   if (!S.events.some(e => e.id === S.current)) S.current = S.events[0].id;
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) {} }
@@ -394,6 +402,8 @@ const EV = () => S.events.find(e => e.id === S.current) || S.events[0];
 const IT = id => S.items.find(x => x.id === id);
 const singles = () => S.items.filter(x => !x.set);
 const sets = () => S.items.filter(x => x.set);
+const CO = id => (S.cons || []).find(c => c.id === id);
+const newCons = () => ({ id: uid(), name: "", fee: "", feeKind: "pct", disc: "self", less: "" });
 
 /* ── 計算 ── */
 // ある商品を1個売ると、どの単品が何個減るか
@@ -433,6 +443,50 @@ function totals(ev) {
   t.moves = ev.moves.reduce((a, m) => a + n(m.amount), 0);
   t.box = n(ev.start) + t.cash + t.moves;
   return t;
+}
+/* 委託：会計ごとの売上を、自分と委託元ごとに分ける */
+// 1行の売上を持ち主ごとに分ける。セットは中身の定価の割合で分ける
+function lineShares(l) {
+  if (l.parts && l.parts.length) {
+    const ps = l.parts.map(p => { const x = IT(p.id); return { id: p.id, q: n(p.q), from: p.from ?? (x ? x.from || "" : ""), unit: has(p.unit) ? n(p.unit) : n(x && x.price) }; });
+    const w = ps.reduce((a, p) => a + p.unit * p.q, 0), qs = ps.reduce((a, p) => a + p.q, 0);
+    return ps.map(p => ({ id: p.id, from: p.from, units: p.q * n(l.qty), val: n(l.price) * n(l.qty) * (w ? (p.unit * p.q) / w : qs ? p.q / qs : 0), viaSet: true }));
+  }
+  const x = IT(l.id);
+  return [{ id: l.id, from: l.from ?? (x ? x.from || "" : ""), units: n(l.qty), val: n(l.price) * n(l.qty), viaSet: false }];
+}
+function consignOf(ev) {
+  const out = {};
+  (S.cons || []).forEach(c => { out[c.id] = { c, items: {}, gross: 0, disc: 0, cash: 0, less: 0, lessFee: 0, units: 0, free: 0 }; });
+  ev.sales.forEach(s => { if (s.void) return;
+    const sh = s.lines.flatMap(lineShares), sub = sh.reduce((a, x) => a + x.val, 0);
+    sh.forEach(x => { const o = out[x.from]; if (!o) return;
+      const it = o.items[x.id] || (o.items[x.id] = { id: x.id, n: 0, set: 0, f: 0, amt: 0 });
+      if (s.pay === "free") { it.f += x.units; o.free += x.units; return; }
+      it.n += x.units; if (x.viaSet) it.set += x.units; it.amt += x.val; o.units += x.units; o.gross += x.val;
+      const dsh = sub ? (n(s.disc) * x.val) / sub : 0, d = o.c.disc === "share" ? dsh : 0, net = x.val - d;
+      o.disc += d; if (s.pay === "cash") o.cash += net; else { o.less += net; if (has(o.c.less)) o.lessFee += (net * n(o.c.less)) / 100; } });
+  });
+  Object.values(out).forEach(o => {
+    singles().filter(x => x.from === o.c.id).forEach(x => { if (!o.items[x.id]) o.items[x.id] = { id: x.id, n: 0, set: 0, f: 0, amt: 0 }; });
+    o.sales = o.gross - o.disc;
+    o.fee = !has(o.c.fee) ? 0 : o.c.feeKind === "yen" ? n(o.c.fee) * o.units : (o.sales * n(o.c.fee)) / 100;
+    o.lessFee = Math.round(o.lessFee); o.fee = Math.round(o.fee); o.sales = Math.round(o.sales); o.disc = Math.round(o.disc); o.cash = Math.round(o.cash); o.less = Math.round(o.less);
+    o.pay = o.sales - o.lessFee - o.fee;
+  });
+  return out;
+}
+const feeText = c => (!has(c.fee) || !n(c.fee) ? "なし" : c.feeKind === "yen" ? `1つにつき${yen(n(c.fee))}` : `売上の${n(c.fee)}%`);
+function consMemo(ev, o) {
+  const L = [`【委託の精算】${o.c.name || "（名前なし）"} さん`, `${ev.name}（${ev.date || ""}）`, ""];
+  Object.values(o.items).forEach(it => { const x = IT(it.id); const st = stockOf(ev, it.id); const back = st == null ? null : st - it.n - it.f;
+    L.push(`・${x ? x.name : "（消した商品）"}：${it.n}点${it.set ? `（うちセット${it.set}点）` : ""}${it.f ? `・無料で渡した ${it.f}点` : ""}・${yen(it.amt)}${st != null ? `／持ち込み ${st}・お返し ${back}` : ""}`); });
+  L.push("", `売上 ${yen(o.gross)}`);
+  if (o.disc) L.push(`値引きの負担 −${yen(o.disc)}`);
+  if (o.lessFee) L.push(`キャッシュレスの手数料（${n(o.c.less)}%） −${yen(o.lessFee)}`);
+  if (o.fee) L.push(`委託手数料（${feeText(o.c)}） −${yen(o.fee)}`);
+  L.push(`お渡しする額 ${yen(o.pay)}`);
+  return L.join("\n");
 }
 // お釣りの早見に出す「もらう額」。小銭を足してお釣りをきりのよい額にする出し方も入れる
 function tenders(T) {
@@ -616,6 +670,7 @@ function renderItems() {
     return `<tr><td class="nw"><button class="x" data-act="up" data-id="${x.id}" aria-label="上へ" ${i ? "" : "disabled"}>▲</button><button class="x" data-act="down" data-id="${x.id}" aria-label="下へ" ${i < list.length - 1 ? "" : "disabled"}>▼</button></td>
       <td>${swatchHTML(x)}</td>
       <td><input type="text" class="req" data-f="item:${x.id}:name" value="${esc(x.name)}" aria-label="商品名"></td>
+      ${S.cons.length ? `<td><select data-f="item:${x.id}:from" aria-label="委託元"><option value="">自分</option>${S.cons.map(c => `<option value="${c.id}" ${x.from === c.id ? "selected" : ""}>${esc(c.name || "（名前なし）")}</option>`).join("")}</select></td>` : ""}
       <td class="r"><input type="number" class="req" data-f="item:${x.id}:price" inputmode="numeric" value="${esc(x.price)}" aria-label="価格"></td>
       <td class="r"><input type="number" data-f="stock:${x.id}" inputmode="numeric" value="${esc(ev.stock[x.id] ?? "")}" placeholder="―" aria-label="このイベントの在庫"></td>
       <td class="r"><input type="number" data-f="item:${x.id}:low" inputmode="numeric" value="${esc(x.low)}" placeholder="―" aria-label="残り少ないとみなす数"></td>
@@ -623,8 +678,8 @@ function renderItems() {
       <td class="c"><button class="x" data-act="delItem" data-id="${x.id}" id="del-${x.id}" aria-label="消す">×</button></td></tr>`;
   }).join("");
   $("secItems").innerHTML = `<div class="sec-h"><h2>商品</h2><p class="lead">商品名と価格を入れると、レジにボタンができます。並びはレジのボタンの順番です。在庫はこのイベントに持っていく数で、入れた商品だけ残りを数えて、少なくなったら知らせます。空欄なら数えません。</p></div>
-  <div class="tbl-wrap"><table class="t"><thead><tr><th>並び</th><th>色</th><th>商品名</th><th class="r">価格（円）</th><th class="r">在庫</th><th class="r">残り少ない</th><th class="r">残り</th><th class="c">消す</th></tr></thead>
-  <tbody>${rows || `<tr><td colspan="8" class="dash">商品がありません</td></tr>`}</tbody></table></div>
+  <div class="tbl-wrap"><table class="t"><thead><tr><th>並び</th><th>色</th><th>商品名</th>${S.cons.length ? "<th>委託元</th>" : ""}<th class="r">価格（円）</th><th class="r">在庫</th><th class="r">残り少ない</th><th class="r">残り</th><th class="c">消す</th></tr></thead>
+  <tbody>${rows || `<tr><td colspan="${S.cons.length ? 9 : 8}" class="dash">商品がありません</td></tr>`}</tbody></table></div>
   <div class="acts"><button class="ghost" data-act="addItem">＋ 商品を足す</button><span class="lead">「残り少ない」は、残りがこの数以下になったらボタンを赤で知らせる数です。</span></div>
   <div class="acts"><button class="ghost danger" data-act="clrStock" id="clrStockBtn" ${Object.keys(ev.stock).length ? "" : "disabled"}>在庫を全部消す</button><button class="ghost danger" data-act="clrLow" id="clrLowBtn" ${list.some(x => has(x.low)) ? "" : "disabled"}>残り少ないを全部消す</button><span class="lead">このイベントの在庫の数や、残り少ないとみなす数を空にします。</span></div>`;
 }
@@ -650,6 +705,18 @@ function renderSets() {
 function setEditor() {
   const x = IT(S.openSet); if (!x || !x.set) return "";
   return `<div class="subopt"><h3>「${esc(x.name)}」の中身</h3><span class="lead">セット1つに入る数を入れてください（0か空欄は入れない）。</span><div class="form">${singles().map(b => { const p = x.parts.find(p => p.id === b.id); return `<div class="field"><label for="sp-${x.id}-${b.id}">${esc(b.name)}</label><input type="number" id="sp-${x.id}-${b.id}" data-f="part:${x.id}:${b.id}" inputmode="numeric" min="0" value="${p ? p.q : ""}" placeholder="0"></div>`; }).join("")}</div><div class="acts"><button class="ghost" data-act="editSet" data-id="${x.id}">閉じる</button></div></div>`;
+}
+function renderCons() {
+  const rows = S.cons.map(c => `<tr><td><input type="text" class="req" data-f="cons:${c.id}:name" value="${esc(c.name)}" placeholder="例：〇〇さん" aria-label="委託元の名前"></td>
+    <td class="nw"><input type="number" data-f="cons:${c.id}:fee" inputmode="decimal" min="0" value="${esc(c.fee)}" placeholder="0" aria-label="委託手数料"> <select data-f="cons:${c.id}:feeKind" aria-label="手数料の単位"><option value="pct" ${c.feeKind !== "yen" ? "selected" : ""}>%（売上に対して）</option><option value="yen" ${c.feeKind === "yen" ? "selected" : ""}>円（1つにつき）</option></select></td>
+    <td><select data-f="cons:${c.id}:disc" aria-label="値引きの持ち方"><option value="self" ${c.disc !== "share" ? "selected" : ""}>自分が持つ</option><option value="share" ${c.disc === "share" ? "selected" : ""}>金額の割合で分ける</option></select></td>
+    <td class="nw"><input type="number" data-f="cons:${c.id}:less" inputmode="decimal" min="0" step="0.01" value="${esc(c.less)}" placeholder="―" aria-label="キャッシュレスの手数料"> %</td>
+    <td class="out" data-out="ccount:${c.id}">${singles().filter(x => x.from === c.id).length}</td>
+    <td class="c"><button class="x" data-act="delCons" data-id="${c.id}" aria-label="消す">×</button></td></tr>`).join("");
+  $("secCons").innerHTML = `<div class="sec-h"><h2>委託（ほかの人の本を置くとき）</h2><p class="lead">ほかのサークルや友人の本をあずかって頒布するときに使います。委託元を足してから、上の「商品」の表の「委託元」で、どの商品がだれのものかを選びます。レジでは自分の商品と同じように並び、「履歴と集計」の「委託の精算」に、委託元ごとの売上とお渡しする額が出ます。</p></div>
+  ${S.cons.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>委託元の名前</th><th>委託手数料</th><th>値引きの持ち方</th><th>キャッシュレスの手数料</th><th class="r">商品</th><th class="c">消す</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <ul class="lead tight"><li>委託手数料：もらう場合だけ入れます。空欄か0なら取りません。</li><li>値引きの持ち方：委託品が入った会計で値引きしたとき、「自分が持つ」なら委託分は定価のまま、「金額の割合で分ける」なら委託分も値引きします。</li><li>キャッシュレスの手数料：決済サービスの手数料を委託分にも負担してもらうときに、その率を入れます。空欄なら負担なしです。</li></ul>` : ""}
+  <div class="acts"><button class="ghost" data-act="addCons">＋ 委託元を足す</button></div>`;
 }
 function renderImport() {
   $("secImport").innerHTML = `<div class="sec-h"><h2>同人誌収支ツールから商品を取り込む</h2><p class="lead">収支ツールの「保存と読み込み」で保存したファイルを選ぶか、「文字をコピー」した文字を下に貼り付けます。頒布物の名前と、選んだ頒布先の紙の価格が入ります。同じ名前の商品があれば、価格だけ書き換えます。</p></div>
@@ -685,9 +752,33 @@ function renderLog() {
     ${t.free ? `<div class="tile free"><span class="k">無料で渡した分</span><span class="v">${yen(t.free)}</span><span class="d">価格で数えた額。売上には入りません</span></div>` : ""}
   </div>`;
   renderRank(ev, t, sold, valid);
+  renderConsLog(ev);
   renderSlots(ev, valid);
   renderBox(ev, t);
   renderSales(ev);
+}
+function renderConsLog(ev) {
+  const box = $("secConsLog"); box.hidden = !S.cons.length; if (!S.cons.length) { box.innerHTML = ""; return; }
+  const all = Object.values(consignOf(ev)), cashAll = all.reduce((a, o) => a + o.cash, 0);
+  const blocks = all.map(o => { const its = Object.values(o.items);
+    const rows = its.map(it => { const x = IT(it.id), st = stockOf(ev, it.id), back = st == null ? null : st - it.n - it.f;
+      return `<tr><td>${esc(x ? x.name : "（消した商品）")}</td><td class="out">${x && has(x.price) ? yen(n(x.price)) : "―"}</td><td class="out">${it.n}${it.set ? `<small>（セット${it.set}）</small>` : ""}</td><td class="out">${it.f || "―"}</td><td class="out">${yen(it.amt)}</td><td class="out">${st == null ? "―" : st}</td><td class="out">${back == null ? "―" : back}</td></tr>`; }).join("");
+    const L = (k, v, cls = "") => `<tr class="${cls}"><td>${k}</td><td class="out">${v}</td></tr>`;
+    return `<div class="cons-b"><h3>${esc(o.c.name || "（名前なし）")}</h3>
+    <div class="tbl-wrap"><table class="t"><thead><tr><th>商品</th><th class="r">価格</th><th class="r">売れた数</th><th class="r">無料</th><th class="r">金額</th><th class="r">持ち込み</th><th class="r">お返し</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="7" class="dash">「商品」の表で、この委託元の商品を選んでください</td></tr>`}</tbody></table></div>
+    <div class="tbl-wrap"><table class="t settle"><tbody>
+      ${L("売上（定価）", yen(o.gross))}
+      ${o.disc ? L("値引きの負担", "−" + yen(o.disc)) : ""}
+      ${o.lessFee ? L(`キャッシュレスの手数料（${n(o.c.less)}%）`, "−" + yen(o.lessFee)) : ""}
+      ${L(`委託手数料（${feeText(o.c)}）`, o.fee ? "−" + yen(o.fee) : "―")}
+      ${L("お渡しする額", yen(o.pay), "total")}
+    </tbody></table></div>
+    <p class="lead">売上のうち 現金 ${yen(o.cash)}／キャッシュレス ${yen(o.less)}。お返しは、持ち込み−売れた数−無料で渡した数です（在庫を入れた商品だけ）。</p>
+    <div class="acts"><button class="ghost" data-act="consMemo" data-id="${o.c.id}">精算メモをコピー</button><span class="msg" id="cmMsg-${o.c.id}" role="status"></span></div>
+    <textarea class="io-out" id="cmOut-${o.c.id}" readonly hidden></textarea></div>`; }).join("");
+  box.innerHTML = `<div class="sec-h"><h2>委託の精算</h2><p class="lead">委託元ごとの売れた数と、お渡しする額です。セットに委託品が入っていたときは、セットの売上を中身の定価の割合で分けています。取り消した会計は入りません。</p></div>
+  ${cashAll ? `<p class="lead">「金庫にあるはず」のうち、委託品の現金の売上は ${yen(cashAll)} です。</p>` : ""}${blocks}`;
 }
 function soldOutTimes(ev) {
   const used = {}, out = {};
@@ -878,8 +969,8 @@ function renderHelp() {
   <div><h3>このツールでできること</h3><p>即売会の当日に使うレジです。商品のボタンを押してかごに入れ、合計とお釣りを見て、決済ボタンで1回の会計を終えます。売れた数・売上・在庫の残り・金庫にあるはずのお金が自動で出ます。お金をいくら受け取ったかは入力しません。</p></div>
   <div><h3>3つのタブ</h3><ul>
     <li><b>レジ</b>：当日に使う画面です。タブレットの横向きでは、左に商品ボタン、右に買い物かごと合計が並びます。スマホでは縦に並び、下の「かごと決済へ」でかごまで動けます。</li>
-    <li><b>商品と準備</b>：レジの設定、イベント（日付と時刻）、釣り銭、商品と価格、その日の在庫、セットを入れます。</li>
-    <li><b>履歴と集計</b>：売上合計、商品ごとのランキング、時間帯ごとの売上、金庫のお金（金種）、会計の一覧を見ます。</li></ul><p>3つのタブは、下にスクロールしても帯のすぐ下に出たままなので、いつでも切り替えられます。「履歴と集計」では、いちばん上の集計（売上合計・会計・金庫にあるはず）もタブの下に出たままになります。お釣り用と売上用で金庫を分けているときは、「金庫にあるはず」の下に金庫ごとの額が出ます。</p></div>
+    <li><b>商品と準備</b>：レジの設定、イベント（日付と時刻）、釣り銭、商品と価格、その日の在庫、セット、委託を入れます。</li>
+    <li><b>履歴と集計</b>：売上合計、商品ごとのランキング、委託の精算、時間帯ごとの売上、金庫のお金（金種）、会計の一覧を見ます。</li></ul><p>3つのタブは、下にスクロールしても帯のすぐ下に出たままなので、いつでも切り替えられます。「履歴と集計」では、いちばん上の集計（売上合計・会計・金庫にあるはず）もタブの下に出たままになります。お釣り用と売上用で金庫を分けているときは、「金庫にあるはず」の下に金庫ごとの額が出ます。</p></div>
   <div><h3>はじめて使うとき</h3><ol>
     <li>最初に出ているサンプルは、上の「サンプルを消して新しく始める」で消せます。</li>
     <li>「商品と準備」タブで、イベント名と開始・終了の時刻、お釣り用に最初に金庫に入れたお金（釣り銭）を入れます。</li>
@@ -902,6 +993,14 @@ function renderHelp() {
   <div><h3>釣り銭の内訳</h3><p>「商品と準備」タブの「釣り銭」で、お札・硬貨の枚数を入れると、その合計が「最初に金庫に入れたお金」に自動で入ります（このときは合計の欄は直せません）。「枚数を全部消す」（2回押して確定）で枚数を空にすると、合計を手で入れられます。</p><p>お釣り用と売上用で金庫を分けているときは、「お釣り用と売上用で金庫を分けている」にチェックを入れます。「履歴と集計」の金庫のお金に、お釣り用の金庫（最初の釣り銭−お釣りで出した額±出し入れ）と売上用の金庫（もらったお金±出し入れ）の額と金種が分かれて出ます。お釣りの内訳は、お釣り用の金庫にある金種（と、もらったお金）から決めます。現金ボタンを使わない会計は、もらった額とお釣りがわからないので、どちらの金庫にも入れず、別に表示します。枚数を入れておくと、「履歴と集計」の「あるはずの金種」で、金庫の中に何円札・何円玉が何枚あるはずかが出ます。</p></div>
   <div><h3>在庫と品切れ</h3><p>「商品と準備」タブの「在庫」は、そのイベントに持っていく数です。入れた商品だけ、商品ボタンに「残り○」が出ます。「残り少ない」に数を入れておくと、残りがその数以下になったときにボタンの文字が赤くなり、決済のお知らせでも知らせます。残りが0になると「品切れ」になってボタンが薄くなり、押せなくなります。かごに入っている分も数えるので、残りより多くはかごに入りません。在庫が空欄の商品は数えないので、いくつでも入ります。商品の表の下の「在庫を全部消す」「残り少ないを全部消す」で、まとめて空にできます（2回押して確定）。</p></div>
   <div><h3>セット</h3><p>「新刊＋既刊セット」のように、まとめて売る商品を作れます。「中身を変える」で、セット1つに入る商品と数を決めます。セットが売れると中身の商品の残りが減ります。セット自体に在庫は入れず、中身の残りから作れる数が「残り」に出ます。</p></div>
+  <div><h3>委託（ほかの人の本を置くとき）</h3><p>「商品と準備」タブの「委託」で「＋ 委託元を足す」を押し、委託元の名前を入れます。すると「商品」の表に「委託元」の列が出るので、あずかった商品ごとに委託元を選びます（はじめは「自分」）。レジでは自分の商品と同じように並び、同じように会計できます。</p><ul>
+    <li><b>委託手数料</b>：もらう場合だけ、「売上の○%」か「1つにつき○円」で入れます。空欄か0なら取りません。</li>
+    <li><b>値引きの持ち方</b>：委託品が入った会計で値引きしたときの分け方です。「自分が持つ」（はじめの設定）なら委託分は定価のまま、「金額の割合で分ける」なら委託分もその割合で値引きします。</li>
+    <li><b>キャッシュレスの手数料</b>：決済サービスの手数料を委託分にも負担してもらうときに、その率（%）を入れます。空欄なら負担なしです。</li>
+    <li><b>セット</b>：自分の本と委託品を組んだセットが売れたときは、セットの売上を中身の定価の割合で分けます。</li>
+    <li><b>無料で渡した</b>：委託品を献本・交換に使ったときは、売上には入らず「無料」の数に出ます。委託品を無料で渡してよいかは、先に委託元と相談しておきましょう。</li></ul>
+  <p>「履歴と集計」タブの「委託の精算」に、委託元ごとの売れた数・金額・持ち込み・お返しの数と、売上から値引きの負担・手数料を引いた「お渡しする額」が出ます。お返しは「持ち込み−売れた数−無料で渡した数」で、在庫を入れた商品だけ出ます。「精算メモをコピー」で、同じ内容を文字でコピーできるので、そのまま委託元に送れます。会計の取り消しや設定の変更は、すぐ反映されます。</p>
+  <p>コミックマーケットなどでは、委託品も自分のサークルの頒布物と同じ扱いで、内容の責任はサークル側にあります。見本誌の提出などは、各イベントのルールを確認してください。</p></div>
   <div><h3>金庫のお金</h3><p>金庫にあるはずの額は「最初に金庫に入れたお金＋現金の売上＋足した額−抜いた額」です。両替や買い出しで出し入れしたときは「履歴と集計」タブの「金庫のお金」で記録してください。メモは「両替」「お昼代」「買い出し」のボタンを押すと入り、前に入れたメモも候補に出ます。「金種で入れる」を開いて枚数を入れると、金額は枚数から計算し、あるはずの金種にも反映します（入れなければ金額だけの記録になります）。金庫を分けているときは、どちらの金庫かも選びます。閉場後などに金庫の中を数えたら「数えた額」に入れると、あるはずの額との差が出ます。</p><p>釣り銭を枚数で入れたか、現金ボタンを使った会計があると、「あるはずの金種」の表が出ます。最初の枚数＋もらった枚数−お釣りで出した枚数±出し入れの枚数です。金種のわからない現金（ボタンを使わない会計・金種を入れていない出し入れ・枚数を入れていない釣り銭）は、下の「内訳がわからない額」にまとめます。お釣りを内訳どおりに渡さなかったときは、実際の枚数とずれます。</p></div>
   <div><h3>ランキングと時間帯</h3><ul>
     <li><b>商品ごとのランキング</b>：「並べ順」で、売れた数・金額・在庫に対して売れた割合・売れるペースを選べます。売上に占める割合は金額と必ず同じ順になるので、表に数字だけ出しています。ペースは「何分に1つ売れたか」で、開始の時刻から最後の会計（品切れした商品は品切れの時刻）までの時間を売れた数で割っています。品切れした商品は、品切れになった会計の時刻も出ます。同じ順位は同じ番号になります。</li>
@@ -912,7 +1011,7 @@ function renderHelp() {
   <div><h3>打ち間違えたとき</h3><p>決済したあとで間違いに気づいたら、会計を取り消して、もう一度打ち直します。取り消した会計は売上・在庫・金庫の中の額から外れ、履歴には線を引いて残ります。取り消しを間違えたときは「戻す」で元に戻せます。</p></div>
   <div><h3>イベントごとの記録</h3><p>記録はイベントごとに分かれます。次のイベントでは「商品と準備」タブの「新しいイベントを作る」を押すと、商品はそのまま、在庫の数・時刻・釣り銭を引き継いだ新しいイベントになります（在庫は持っていく数に直してください）。前のイベントの記録は「表示しているイベント」で選ぶと見られます。</p></div>
   <div><h3>同人誌収支ツールから取り込む</h3><p>収支ツールの「保存と読み込み」で保存したファイルを、「商品と準備」タブのいちばん下で選ぶか、「文字をコピー」した文字を貼り付けて、「貼り付けた内容を読む」を押します。どの頒布先の価格を使うかを選び、取り込む頒布物にチェックを入れて「選んだ商品を取り込む」を押してください。同じ名前の商品があれば、価格だけ書き換えます。在庫は取り込みません。</p></div>
-  <div><h3>表計算用にコピー</h3><p>「履歴と集計」タブの「表計算用にコピー（CSV）」で、会計の一覧（日時・内容・支払い・金額）をコピーできます。Excelやスプレッドシートに貼り付けると、1行に1つの商品で並びます。</p></div>
+  <div><h3>表計算用にコピー</h3><p>「履歴と集計」タブの「表計算用にコピー（CSV）」で、会計の一覧（日時・内容・委託元・支払い・金額）をコピーできます。Excelやスプレッドシートに貼り付けると、1行に1つの商品で並びます。</p></div>
   <div><h3>画面の見方</h3><ul>
     <li>青く塗ったボタンは大事な操作（現金で決済など）、枠のボタンは普通の操作です。赤い枠のボタンは消す・取り消す操作です。</li>
     <li>青い枠のマスは、使うのに必要な欄です（イベント名・商品名・価格）。</li>
@@ -922,7 +1021,7 @@ function renderHelp() {
 }
 
 function renderAll(pop) {
-  renderTabs(); renderBand(); renderReg(pop); renderSettings(); renderEvent(); renderItems(); renderSets(); renderImport(); renderImpOut(); renderLog(); renderMgmt(); renderHelp();
+  renderTabs(); renderBand(); renderReg(pop); renderSettings(); renderEvent(); renderItems(); renderSets(); renderCons(); renderImport(); renderImpOut(); renderLog(); renderMgmt(); renderHelp();
 }
 function softRender(pop) { renderBand(); renderReg(pop); }
 
@@ -948,7 +1047,7 @@ function addToCart(id) {
 function checkout(pay) {
   if (!S.cart.length) return;
   const ev = EV();
-  const lines = S.cart.map(c => { const x = IT(c.id); return { id: c.id, name: c.name, price: n(c.price), qty: c.qty, ...(x && x.set ? { parts: x.parts.map(p => ({ ...p })) } : {}) }; });
+  const lines = S.cart.map(c => { const x = IT(c.id); return { id: c.id, name: c.name, price: n(c.price), qty: c.qty, ...(x && x.set ? { parts: x.parts.map(p => { const y = IT(p.id); return { ...p, from: y ? y.from || "" : "", unit: n(y && y.price) }; }) } : { from: x ? x.from || "" : "" }) }; });
   const sub = lines.reduce((a, l) => a + l.price * l.qty, 0);
   const disc = pay === "free" ? 0 : Math.min(sub, n(S.disc));
   const total = pay === "free" ? 0 : sub - disc;
@@ -1008,11 +1107,17 @@ document.addEventListener("click", e => {
   if (act === "toCart") { $("side").scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   if (act === "tab") { S.tab = b.dataset.v; save(); renderTabs(); renderReg(); if (S.tab === "log") renderLog(); window.scrollTo({ top: 0 }); fitSide(); return; }
   if (act === "help") { $("helpBox").open = true; $("helpBox").scrollIntoView({ behavior: "smooth" }); return; }
-  if (act === "fresh") { const ev2 = newEvent("新しいイベント"); S = { items: [], events: [ev2], current: ev2.id, tab: "item", cart: [], disc: "", recv: [], cashMode: !!S.cashMode, sample: false }; save(); renderAll(); window.scrollTo({ top: 0 }); return; }
+  if (act === "fresh") { const ev2 = newEvent("新しいイベント"); S = { items: [], cons: [], events: [ev2], current: ev2.id, tab: "item", cart: [], disc: "", recv: [], cashMode: !!S.cashMode, sample: false }; save(); renderAll(); window.scrollTo({ top: 0 }); return; }
   if (act === "color") { const x = IT(id); if (x) x.color = b.dataset.v; }
   else if (act === "up" || act === "down") { const i = S.items.findIndex(x => x.id === id); if (i >= 0) move(i, act === "up" ? -1 : 1); }
   else if (act === "addItem") { const x = newItem(); x.color = COLORS[singles().length % COLORS.length]; const lastSingle = S.items.map(y => y.set).lastIndexOf(false); S.items.splice(lastSingle + 1, 0, x); S.sample = false; }
   else if (act === "addSet") { const x = newItem("新しいセット"); x.set = true; x.color = COLORS[4]; S.items.push(x); S.openSet = x.id; S.sample = false; }
+  else if (act === "addCons") { S.cons.push(newCons()); S.sample = false; }
+  else if (act === "delCons") { return arm(b, "もう一度押すと消します（商品は自分のものに戻ります）", () => { S.cons = S.cons.filter(c => c.id !== id); S.items.forEach(x => { if (x.from === id) x.from = ""; }); save(); renderAll(); }); }
+  else if (act === "consMemo") { const o = consignOf(ev)[id]; if (!o) return; const txt = consMemo(ev, o); const m = $("cmMsg-" + id);
+    const show = (t, bad) => { if (!m) return; m.textContent = t; m.className = "msg" + (bad ? " bad" : ""); clearTimeout(m._t); m._t = setTimeout(() => { m.textContent = ""; }, 4000); };
+    try { navigator.clipboard.writeText(txt).then(() => show("コピーしました"), () => { const o2 = $("cmOut-" + id); o2.hidden = false; o2.value = txt; o2.select(); show("下の欄に出しました。選んでコピーしてください"); }); }
+    catch (_) { const o2 = $("cmOut-" + id); o2.hidden = false; o2.value = txt; o2.select(); show("下の欄に出しました。選んでコピーしてください"); } return; }
   else if (act === "editSet") { S.openSet = S.openSet === id ? null : id; }
   else if (act === "delItem") { const x = IT(id); return arm(b, "もう一度押すと消します", () => { S.items = S.items.filter(y => y.id !== id); S.items.forEach(y => { if (y.set) y.parts = y.parts.filter(p => p.id !== id); }); S.cart = S.cart.filter(c => c.id !== id); save(); renderAll(); }); }
   else if (act === "newEvent") { const e2 = newEvent(); e2.stock = { ...ev.stock }; e2.start = ev.start; e2.startDen = { ...(ev.startDen || {}) }; e2.open = ev.open || ""; e2.close = ev.close || ""; S.events.push(e2); S.current = e2.id; S.cart = []; S.disc = ""; }
@@ -1027,8 +1132,9 @@ document.addEventListener("click", e => {
   else if (act === "delMove") { return arm(b, "もう一度押すと消します", () => { ev.moves = ev.moves.filter(m => m.id !== id); save(); renderAll(); }); }
   else if (act === "void") { return arm(b, "もう一度押すと取り消します", () => { const s = ev.sales.find(s => s.id === id); if (s) s.void = true; save(); renderAll(); }); }
   else if (act === "unvoid") { const s = ev.sales.find(s => s.id === id); if (s) delete s.void; }
-  else if (act === "csv") { const rows = [["日時", "イベント", "支払い", "商品", "価格", "個数", "小計", "値引き", "会計の金額", "取り消し"]];
-    ev.sales.forEach(s => s.lines.forEach((l, i) => rows.push([mdhm(s.t), ev.name, PAY[s.pay], l.name, l.price, l.qty, l.price * l.qty, i ? "" : n(s.disc) || "", i ? "" : s.total, s.void ? "取り消し" : ""])));
+  else if (act === "csv") { const rows = [["日時", "イベント", "支払い", "商品", "委託元", "価格", "個数", "小計", "値引き", "会計の金額", "取り消し"]];
+    const fromName = l => [...new Set(lineShares(l).map(x => (x.from ? (CO(x.from)?.name || "委託") : "自分")))].join("・");
+    ev.sales.forEach(s => s.lines.forEach((l, i) => rows.push([mdhm(s.t), ev.name, PAY[s.pay], l.name, fromName(l), l.price, l.qty, l.price * l.qty, i ? "" : n(s.disc) || "", i ? "" : s.total, s.void ? "取り消し" : ""])));
     const txt = rows.map(r => r.map(v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\n");
     const o = $("csvOut"); o.hidden = false; o.value = txt; o.select(); try { navigator.clipboard.writeText(txt).then(() => { flash(b, "コピーしました"); }, () => {}); } catch (_) {} return; }
   else if (act === "impRead") { try { const o = JSON.parse($("impText").value); if (o.format !== "doujin-shushi" || !o.data?.products) throw 0;
@@ -1063,6 +1169,7 @@ document.addEventListener("input", e => {
     document.querySelector('[data-out="starthint"]').textContent = auto ? "枚数から計算しています" : "枚数を入れないときは、ここに合計を入れます"; const cb = $("clrDenBtn"); if (cb) cb.disabled = !auto;
     save(); renderBand(); renderReg(); renderLog(); return; }
   if (kind === "item") { const x = IT(a); if (!x) return; x[b] = ["price", "low"].includes(b) ? numish(v) : v; S.cart.forEach(c => { if (c.id === a) { if (b === "name") c.name = v; if (b === "price") c.price = numish(v); } }); }
+  else if (kind === "cons") { const c = CO(a); if (!c) return; c[b] = ["fee", "less"].includes(b) ? numish(v) : v; S.sample = false; save(); renderLog(); return; }
   else if (kind === "stock") { if (v === "") delete ev.stock[a]; else ev.stock[a] = Number(v); const o = document.querySelector(`[data-out="rem:${a}"]`); const r = remain(ev, a, soldMap(ev)); if (o) o.textContent = r == null ? "―" : r; }
   else if (kind === "part") { const x = IT(a); if (!x) return; const q = n(v); x.parts = x.parts.filter(p => p.id !== b); if (q > 0) x.parts.push({ id: b, q }); x.parts.sort((p, q2) => S.items.findIndex(i => i.id === p.id) - S.items.findIndex(i => i.id === q2.id)); }
   S.sample = false; save(); renderBand(); renderReg(); renderLog();
@@ -1083,6 +1190,9 @@ document.addEventListener("change", e => {
   if (el.dataset.impch !== undefined) { IMP.ch = el.value; renderImpOut(); return; }
   if (el.dataset.imp) { IMP.pick[el.dataset.imp] = el.checked; return; }
   if (el.dataset.f && el.dataset.f.startsWith("part:")) { save(); renderSets(); renderReg(); return; }
+  // 描き直すと、続けて押したボタンが空振りするので、変わったところだけ書き換える
+  if (el.dataset.f && el.dataset.f.startsWith("cons:")) { const [, cid, k] = el.dataset.f.split(":"); if (k === "name") document.querySelectorAll(`select[data-f$=":from"] option[value="${cid}"]`).forEach(o => { o.textContent = CO(cid)?.name || "（名前なし）"; }); return; }
+  if (el.dataset.f && el.dataset.f.endsWith(":from")) { S.cons.forEach(c => { const o = document.querySelector(`[data-out="ccount:${c.id}"]`); if (o) o.textContent = singles().filter(x => x.from === c.id).length; }); renderLog(); return; }
   if (el.dataset.f && (el.dataset.f.endsWith(":name") || el.dataset.f === "ev.name")) { renderEvent(); renderSets(); renderLog(); }
 });
 
